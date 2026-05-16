@@ -250,6 +250,7 @@ class RapportJournalier(models.Model):
     total_retraits  = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     total_credits   = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     total_transferts= models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_commissions = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     benefice_net    = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     cree_le         = models.DateTimeField(auto_now_add=True)
 
@@ -259,3 +260,28 @@ class RapportJournalier(models.Model):
 
     def __str__(self):
         return f"Rapport {self.boutique.nom} — {self.date}"
+    
+# ══════════════════════════════════════════════════════════════════════
+# AVIS UTILISATEUR
+# ══════════════════════════════════════════════════════════════════════
+
+class Avis(models.Model):
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    utilisateur = models.ForeignKey(
+        Utilisateur,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='avis',
+    )
+    message     = models.TextField()
+    lu          = models.BooleanField(default=False)   # marqué lu par un admin
+    cree_le     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-cree_le']
+        verbose_name = "Avis"
+        verbose_name_plural = "Avis"
+
+    def __str__(self):
+        auteur = self.utilisateur.email if self.utilisateur else "Anonyme"
+        return f"Avis de {auteur} — {self.cree_le:%d/%m/%Y}"

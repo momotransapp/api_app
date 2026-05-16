@@ -53,4 +53,8 @@ urlpatterns = [
          views.rapport_commissions,                                                  name='rapport_commissions'),
     path('boutiques/<uuid:boutique_id>/rapports/solde-global/',
          views.solde_global,                                                         name='solde_global'),
+    
+    path('avis/',                    views.soumettre_avis,   name='soumettre_avis'),
+    path('avis/admin/',              views.liste_avis,        name='liste_avis'),
+    path('avis/<uuid:avis_id>/lu/',  views.marquer_avis_lu,  name='marquer_avis_lu'),
 ]

@@ -9,20 +9,8 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import (
-    Utilisateur, CodeVerification, Pack, Abonnement,
-    Boutique, MembreBoutique, SoldeOperateur, Transaction, RapportJournalier,
-)
-from .serializers import (
-    InscriptionSerializer, ConnexionSerializer, VerificationCodeSerializer,
-    MotDePasseOublieSerializer, ReinitialisationMotDePasseSerializer,
-    UtilisateurSerializer, RechercheUtilisateurSerializer,
-    PackSerializer, AbonnementSerializer, SouscrireAbonnementSerializer,
-    BoutiqueSerializer, MembreBoutiqueSerializer, AjouterMembreSerializer,
-    SoldeOperateurSerializer, MiseAJourSoldesSerializer,
-    TransactionSerializer, RapportJournalierSerializer,
-    RapportOperateurSerializer, RapportCommissionsSerializer, SoldeGlobalSerializer,
-)
+from .models import *
+from .serializers import *
 from .permissions import (
     EstVerifie, EstMembreBoutique, EstProprietaireBoutique,
     AAbonnementActif, APackAvance, get_abonnement_actif,
@@ -160,13 +148,14 @@ def connexion(request):
     if not utilisateur:
         return Response({"error": "Email ou mot de passe incorrect."}, status=401)
 
-    if not utilisateur.is_verified:
+    if not utilisateur.is_active:
         # Renvoyer un nouveau code
         code_obj = creer_code(utilisateur, 'email')
         print(f"[DEV] Code vérification renvoyé : {code_obj.code}")
         return Response({
-            "error": "Email non vérifié.",
+            "error": "Compte non activé.",
             "message": "Un nouveau code a été envoyé à votre adresse email.",
+            'user_email': utilisateur.email,
         }, status=403)
 
     return Response({
@@ -382,37 +371,50 @@ def _verifier_limite_boutiques(utilisateur):
 @permission_classes([IsAuthenticated, EstVerifie])
 def mes_boutiques(request):
     """
-    GET  /boutiques/         → liste des boutiques de l'utilisateur
-    POST /boutiques/         → créer une boutique
+    GET  /boutiques/
+         → Retourne toutes les boutiques dont l'utilisateur est membre actif.
+           Cela inclut les boutiques dont il est propriétaire ET celles
+           où il a été ajouté comme gérant/admin.
+ 
+    POST /boutiques/
+         → Crée une nouvelle boutique (le créateur devient propriétaire + membre).
     """
     if request.method == 'GET':
-        boutiques = Boutique.objects.filter(proprietaire=request.user, active=True)
+        # Récupérer les IDs de boutiques où l'user est membre actif
+        boutique_ids = MembreBoutique.objects.filter(
+            utilisateur=request.user,
+            actif=True,
+        ).values_list('boutique_id', flat=True)
+ 
+        # Récupérer les boutiques actives correspondantes
+        boutiques = Boutique.objects.filter(id__in=boutique_ids, active=True)
         return Response(BoutiqueSerializer(boutiques, many=True).data)
-
-    # POST
+ 
+    # ── POST : créer une boutique ─────────────────────────────────────────
     ok, msg = _verifier_limite_boutiques(request.user)
     if not ok:
         return Response({"error": msg}, status=403)
-
+ 
     serializer = BoutiqueSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
-
+ 
     boutique = serializer.save(proprietaire=request.user)
-
-    # Créer les soldes par défaut
+ 
+    # Créer les soldes par défaut (MTN, Moov, Celtiis, Caisse)
     for op in ['MTN', 'Moov', 'Celtiis', 'Caisse']:
         SoldeOperateur.objects.get_or_create(boutique=boutique, operateur=op)
-
-    # Ajouter le propriétaire comme membre
+ 
+    # Ajouter le propriétaire comme membre (rôle propriétaire, ne peut pas être retiré)
     MembreBoutique.objects.create(
         boutique=boutique,
         utilisateur=request.user,
         role='proprietaire',
     )
-
+ 
     return Response(BoutiqueSerializer(boutique).data, status=201)
-
+ 
+ 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated, EstVerifie])
@@ -521,6 +523,7 @@ def membres_boutique(request, boutique_id):
     return Response(MembreBoutiqueSerializer(membre).data, status=201)
 
 
+
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated, EstVerifie])
 def retirer_membre(request, boutique_id, membre_id):
@@ -529,19 +532,23 @@ def retirer_membre(request, boutique_id, membre_id):
         boutique = Boutique.objects.get(id=boutique_id, proprietaire=request.user)
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable ou accès refusé."}, status=404)
-
+ 
     try:
         membre = MembreBoutique.objects.get(id=membre_id, boutique=boutique)
     except MembreBoutique.DoesNotExist:
         return Response({"error": "Membre introuvable."}, status=404)
-
+ 
+    # Bloquer la suppression du propriétaire (protection absolue)
+    if membre.role == 'proprietaire':
+        return Response({"error": "Le propriétaire ne peut pas être retiré de sa boutique."}, status=400)
+ 
+    # Bloquer l'auto-suppression
     if membre.utilisateur == request.user:
         return Response({"error": "Vous ne pouvez pas vous retirer vous-même."}, status=400)
-
+ 
     membre.actif = False
     membre.save()
     return Response({"message": "Membre retiré de la boutique."})
-
 
 # ══════════════════════════════════════════════════════════════════════════
 #  SOLDES
@@ -822,3 +829,105 @@ def solde_global(request, boutique_id):
     total = sum(s.montant for s in soldes)
 
     return Response({"soldes": data, "total": total})
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, EstVerifie])
+def rapport_commissions(request, boutique_id):
+    """
+    GET /boutiques/<boutique_id>/rapports/commissions/?date_debut=...&date_fin=...
+    Nécessite Pack Pro ou Premium.
+    """
+    try:
+        boutique = Boutique.objects.get(id=boutique_id)
+    except Boutique.DoesNotExist:
+        return Response({"error": "Boutique introuvable."}, status=404)
+
+    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
+        return Response({"error": "Accès refusé."}, status=403)
+
+    ok, msg = _verifier_acces_rapports(request.user, boutique)
+    if not ok:
+        return Response({"error": msg}, status=403)
+
+    date_debut = request.query_params.get('date_debut', str(date.today()))
+    date_fin   = request.query_params.get('date_fin', str(date.today()))
+
+    qs = Transaction.objects.filter(boutique=boutique, date__date__gte=date_debut, date__date__lte=date_fin)
+
+    rapport = []
+    for op in ['MTN', 'Moov', 'Celtiis']:
+        total = qs.filter(operateur=op).aggregate(total=Sum('commission'))['total'] or 0
+        rapport.append({"operateur": op, "total_commissions": total})
+
+    total_global = sum(r['total_commissions'] for r in rapport)
+    return Response({"commissions_par_operateur": rapport, "total_global": total_global})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  AVIS
+# ══════════════════════════════════════════════════════════════════════════
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EstVerifie])
+def soumettre_avis(request):
+    """
+    POST /avis/
+    {"message": "Super application !"}
+    Soumet un avis lié à l'utilisateur connecté.
+    """
+    message = request.data.get('message', '').strip()
+
+    if not message:
+        return Response({"error": "Le message ne peut pas être vide."}, status=400)
+
+    if len(message) > 255:
+        return Response({"error": "Le message ne doit pas dépasser 255 caractères."}, status=400)
+
+    avis = Avis.objects.create(
+        utilisateur=request.user,
+        message=message,
+    )
+
+    return Response(AvisSerializer(avis).data, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def liste_avis(request):
+    """
+    GET /avis/admin/
+    Réservé aux admins Django (is_staff).
+    Paramètres optionnels : ?lu=true|false
+    """
+    if not request.user.is_staff:
+        return Response({"error": "Accès réservé aux administrateurs."}, status=403)
+
+    qs = Avis.objects.select_related('utilisateur').all()
+
+    lu_param = request.query_params.get('lu')
+    if lu_param is not None:
+        qs = qs.filter(lu=lu_param.lower() == 'true')
+
+    return Response(AvisSerializer(qs, many=True).data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def marquer_avis_lu(request, avis_id):
+    """
+    PATCH /avis/<avis_id>/lu/
+    Réservé aux admins Django. Marque un avis comme lu.
+    """
+    if not request.user.is_staff:
+        return Response({"error": "Accès réservé aux administrateurs."}, status=403)
+
+    try:
+        avis = Avis.objects.get(id=avis_id)
+    except Avis.DoesNotExist:
+        return Response({"error": "Avis introuvable."}, status=404)
+
+    avis.lu = True
+    avis.save()
+    return Response(AvisSerializer(avis).data)

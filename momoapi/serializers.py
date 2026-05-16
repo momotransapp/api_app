@@ -1,9 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from .models import (
-    Utilisateur, CodeVerification, Pack, Abonnement,
-    Boutique, MembreBoutique, SoldeOperateur, Transaction, RapportJournalier,
-)
+from .models import *
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -211,3 +208,14 @@ class RapportCommissionsSerializer(serializers.Serializer):
 class SoldeGlobalSerializer(serializers.Serializer):
     operateur = serializers.CharField()
     montant   = serializers.DecimalField(max_digits=14, decimal_places=2)
+
+class AvisSerializer(serializers.ModelSerializer):
+    utilisateur_email = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Avis
+        fields = ['id', 'utilisateur_email', 'message', 'lu', 'cree_le']
+        read_only_fields = ['id', 'utilisateur_email', 'lu', 'cree_le']
+
+    def get_utilisateur_email(self, obj):
+        return obj.utilisateur.email if obj.utilisateur else None
