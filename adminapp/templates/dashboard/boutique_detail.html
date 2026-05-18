@@ -1,0 +1,191 @@
+ {% extends 'dashboard/base.html' %}
+{% block title %}{{ boutique.nom }}{% endblock %}
+{% block header_title %}Détail boutique{% endblock %}
+{% block breadcrumb %}Boutiques › {{ boutique.nom }}{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div style="display:flex;align-items:center;gap:16px">
+    <a href="{% url 'dashboard:boutiques' %}" class="btn btn-ghost btn-sm">← Retour</a>
+    <div>
+      <div class="page-heading">{{ boutique.nom }}</div>
+      <div class="page-sub">Propriétaire : {{ boutique.proprietaire.prenom }} {{ boutique.proprietaire.nom }}</div>
+    </div>
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="toggle_active">
+    <button type="submit" class="btn {% if boutique.active %}btn-danger{% else %}btn-success{% endif %} btn-sm">
+      {% if boutique.active %}Désactiver{% else %}Réactiver{% endif %}
+    </button>
+  </form>
+</div>
+
+<!-- KPIs boutique -->
+<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+  <div class="kpi-card" style="--accent-color:#22c55e">
+    <span class="kpi-icon">💰</span>
+    <div class="kpi-value" style="font-size:18px">{{ stats.total_depots|default:0|floatformat:0 }}</div>
+    <div class="kpi-label">Total dépôts (XOF)</div>
+  </div>
+  <div class="kpi-card" style="--accent-color:#ef4444">
+    <span class="kpi-icon">💸</span>
+    <div class="kpi-value" style="font-size:18px">{{ stats.total_retraits|default:0|floatformat:0 }}</div>
+    <div class="kpi-label">Total retraits (XOF)</div>
+  </div>
+  <div class="kpi-card" style="--accent-color:#2979FF">
+    <span class="kpi-icon">📱</span>
+    <div class="kpi-value" style="font-size:18px">{{ stats.total_credits|default:0|floatformat:0 }}</div>
+    <div class="kpi-label">Total crédits (XOF)</div>
+  </div>
+  <div class="kpi-card" style="--accent-color:#a855f7">
+    <span class="kpi-icon">⭐</span>
+    <div class="kpi-value" style="font-size:18px">{{ stats.total_commissions|default:0|floatformat:0 }}</div>
+    <div class="kpi-label">Commissions (XOF)</div>
+  </div>
+</div>
+
+<div class="grid-2" style="margin-bottom:20px">
+
+  <!-- Infos -->
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Informations</div></div>
+    <div class="panel-body">
+      <table style="width:100%">
+        <tbody>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0;width:120px">ID</td>
+            <td style="font-size:10px;color:var(--text2);font-family:monospace">{{ boutique.id }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Nom</td>
+            <td class="td-main">{{ boutique.nom }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Devise</td>
+            <td>{{ boutique.devise }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Adresse</td>
+            <td>{{ boutique.adresse|default:"Non renseignée" }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Créée le</td>
+            <td>{{ boutique.cree_le|date:"d/m/Y à H:i" }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Statut</td>
+            <td>
+              {% if boutique.active %}
+              <span class="badge badge-green">● Active</span>
+              {% else %}
+              <span class="badge badge-red">● Inactive</span>
+              {% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Soldes -->
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Soldes par opérateur</div></div>
+    <div class="panel-body">
+      {% for s in soldes %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:34px;height:34px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px">
+            {% if s.operateur == 'MTN' %}🟡{% elif s.operateur == 'Moov' %}🟢{% elif s.operateur == 'Celtiis' %}🔵{% else %}💼{% endif %}
+          </div>
+          <div class="td-main">{{ s.operateur }}</div>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--text)">
+          {{ s.montant|floatformat:0 }} <span style="font-size:11px;color:var(--text3);font-weight:400">XOF</span>
+        </div>
+      </div>
+      {% empty %}
+      <div class="empty">Aucun solde enregistré</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Membres -->
+<div class="panel" style="margin-bottom:20px">
+  <div class="panel-header"><div class="panel-title">Membres ({{ membres.count }})</div></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Utilisateur</th><th>Email</th><th>Rôle</th><th>Statut</th><th>Depuis</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for m in membres %}
+        <tr>
+          <td class="td-main">{{ m.utilisateur.prenom }} {{ m.utilisateur.nom }}</td>
+          <td>{{ m.utilisateur.email }}</td>
+          <td>
+            {% if m.role == 'proprietaire' %}
+            <span class="badge badge-amber">👑 Propriétaire</span>
+            {% elif m.role == 'gerant' %}
+            <span class="badge badge-blue">Gérant</span>
+            {% else %}
+            <span class="badge badge-purple">Admin</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if m.actif %}
+            <span class="badge badge-green">Actif</span>
+            {% else %}
+            <span class="badge badge-red">Inactif</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--text3)">{{ m.ajoute_le|date:"d/m/Y" }}</td>
+          <td><a href="{% url 'dashboard:utilisateur_detail' m.utilisateur.id %}" class="btn btn-ghost btn-sm">Profil →</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="empty">Aucun membre</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Transactions récentes -->
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">Transactions récentes</div>
+    <a href="{% url 'dashboard:transactions' %}" class="panel-action">Voir tout →</a>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Type</th><th>Opérateur</th><th>Montant</th><th>Commission</th><th>Client</th><th>Par</th><th>Date</th></tr>
+      </thead>
+      <tbody>
+        {% for tx in transactions %}
+        <tr>
+          <td>
+            {% if tx.type == 'Depot' %}<span class="badge badge-green">↑ Dépôt</span>
+            {% elif tx.type == 'Retrait' %}<span class="badge badge-red">↓ Retrait</span>
+            {% else %}<span class="badge badge-blue">◈ Crédit</span>{% endif %}
+          </td>
+          <td><span class="badge badge-gray">{{ tx.operateur }}</span></td>
+          <td class="td-main">{{ tx.montant|floatformat:0 }} XOF</td>
+          <td style="color:var(--green)">+{{ tx.commission|floatformat:0 }}</td>
+          <td style="font-size:12px">{{ tx.nom_client|default:tx.numero_client }}</td>
+          <td style="font-size:12px;color:var(--text2)">
+            {% if tx.effectuee_par %}{{ tx.effectuee_par.prenom }}{% else %}—{% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--text3)">{{ tx.date|date:"d/m/Y H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="empty">Aucune transaction</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

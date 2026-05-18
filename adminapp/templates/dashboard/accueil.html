@@ -1,0 +1,265 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Tableau de bord{% endblock %}
+{% block header_title %}Tableau de bord{% endblock %}
+{% block breadcrumb %}Vue d'ensemble{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div>
+    <div class="page-heading">Vue d'ensemble 📊</div>
+    <div class="page-sub">Toutes les métriques de la plateforme en temps réel</div>
+  </div>
+</div>
+
+<!-- ── KPIs ── -->
+<div class="kpi-grid">
+  <div class="kpi-card" style="--accent-color: #2979FF">
+    <span class="kpi-icon">👥</span>
+    <div class="kpi-value">{{ kpis.total_utilisateurs }}</div>
+    <div class="kpi-label">Utilisateurs</div>
+    <div class="kpi-sub">+{{ kpis.nouveaux_ce_mois }} ce mois</div>
+  </div>
+  <div class="kpi-card" style="--accent-color: #22c55e">
+    <span class="kpi-icon">🏪</span>
+    <div class="kpi-value">{{ kpis.total_boutiques }}</div>
+    <div class="kpi-label">Boutiques actives</div>
+  </div>
+  <div class="kpi-card" style="--accent-color: #f59e0b">
+    <span class="kpi-icon">💸</span>
+    <div class="kpi-value">{{ kpis.total_transactions }}</div>
+    <div class="kpi-label">Transactions totales</div>
+    <div class="kpi-sub">{{ kpis.transactions_auj }} aujourd'hui</div>
+  </div>
+  <div class="kpi-card" style="--accent-color: #a855f7">
+    <span class="kpi-icon">📦</span>
+    <div class="kpi-value">{{ kpis.abonnements_actifs }}</div>
+    <div class="kpi-label">Abonnements actifs</div>
+  </div>
+  <div class="kpi-card" style="--accent-color: #ef4444">
+    <span class="kpi-icon">💬</span>
+    <div class="kpi-value">{{ kpis.total_avis }}</div>
+    <div class="kpi-label">Avis reçus</div>
+    <div class="kpi-sub">{{ kpis.avis_non_lus }} non lus</div>
+  </div>
+</div>
+
+<!-- ── Charts row ── -->
+<div class="grid-2">
+
+  <!-- Transactions 7 jours -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Transactions — 7 derniers jours</div>
+    </div>
+    <div class="panel-body">
+      <canvas id="chartTx" height="180"></canvas>
+    </div>
+  </div>
+
+  <!-- Abonnements par pack -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Abonnements actifs par pack</div>
+    </div>
+    <div class="panel-body" style="display:flex;align-items:center;gap:24px;">
+      <canvas id="chartPacks" width="160" height="160" style="flex-shrink:0"></canvas>
+      <div style="flex:1">
+        {% for abo in abo_par_pack %}
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="dot
+            {% if abo.pack__cle == 'basic' %}dot-gray
+            {% elif abo.pack__cle == 'pro' %}dot-green
+            {% else %}dot-amber{% endif %}"></span>
+          <span style="font-size:13px;color:var(--text)">{{ abo.pack__nom }}</span>
+          <span style="margin-left:auto;font-size:13px;font-weight:600;color:var(--text)">{{ abo.total }}</span>
+        </div>
+        {% empty %}
+        <div class="empty" style="padding:20px">Aucun abonnement</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 2e ligne ── -->
+<div class="grid-2">
+
+  <!-- Top boutiques -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Top boutiques par transactions</div>
+      <a href="{% url 'dashboard:boutiques' %}" class="panel-action">Voir tout →</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Boutique</th>
+            <th>Propriétaire</th>
+            <th>Transactions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in top_boutiques %}
+          <tr>
+            <td style="color:var(--text3)">{{ forloop.counter }}</td>
+            <td>
+              <a href="{% url 'dashboard:boutique_detail' b.id %}" class="link td-main">{{ b.nom }}</a>
+            </td>
+            <td>{{ b.proprietaire.prenom }} {{ b.proprietaire.nom }}</td>
+            <td><span class="badge badge-blue">{{ b.nb_tx }}</span></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="empty">Aucune boutique</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Répartition types -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Répartition par type</div>
+    </div>
+    <div class="panel-body">
+      {% with depot=type_data.Depot|default:0 retrait=type_data.Retrait|default:0 credit=type_data.Credit|default:0 %}
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
+          <span style="color:var(--text2)">🟢 Dépôts</span>
+          <span style="color:var(--text);font-weight:600">{{ depot }}</span>
+        </div>
+        <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:{% widthratio depot kpis.total_transactions 100 %}%;background:var(--green);border-radius:3px;transition:width 0.5s"></div>
+        </div>
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
+          <span style="color:var(--text2)">🔴 Retraits</span>
+          <span style="color:var(--text);font-weight:600">{{ retrait }}</span>
+        </div>
+        <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:{% widthratio retrait kpis.total_transactions 100 %}%;background:var(--red);border-radius:3px;transition:width 0.5s"></div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
+          <span style="color:var(--text2)">🔵 Crédits</span>
+          <span style="color:var(--text);font-weight:600">{{ credit }}</span>
+        </div>
+        <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:{% widthratio credit kpis.total_transactions 100 %}%;background:var(--accent);border-radius:3px;transition:width 0.5s"></div>
+        </div>
+      </div>
+      {% endwith %}
+    </div>
+  </div>
+</div>
+
+<!-- ── Dernières transactions ── -->
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">Dernières transactions</div>
+    <a href="{% url 'dashboard:transactions' %}" class="panel-action">Voir tout →</a>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Boutique</th>
+          <th>Opérateur</th>
+          <th>Montant</th>
+          <th>Commission</th>
+          <th>Effectuée par</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in dernieres_tx %}
+        <tr>
+          <td>
+            {% if tx.type == 'Depot' %}
+              <span class="badge badge-green">↑ Dépôt</span>
+            {% elif tx.type == 'Retrait' %}
+              <span class="badge badge-red">↓ Retrait</span>
+            {% else %}
+              <span class="badge badge-blue">◈ Crédit</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'dashboard:boutique_detail' tx.boutique.id %}" class="link">{{ tx.boutique.nom }}</a>
+          </td>
+          <td><span class="badge badge-gray">{{ tx.operateur }}</span></td>
+          <td class="td-main">{{ tx.montant|floatformat:0 }} XOF</td>
+          <td style="color:var(--green)">+{{ tx.commission|floatformat:0 }}</td>
+          <td style="color:var(--text2)">
+            {% if tx.effectuee_par %}{{ tx.effectuee_par.prenom }}{% else %}—{% endif %}
+          </td>
+          <td style="color:var(--text3);font-size:12px">{{ tx.date|date:"d/m/y H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="empty">Aucune transaction</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+Chart.defaults.color = '#8a8fa0';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+
+// ── Transactions 7j ──
+const tx7jData = {{ tx_7j|safe }};
+new Chart(document.getElementById('chartTx'), {
+  type: 'bar',
+  data: {
+    labels: tx7jData.map(d => d.date),
+    datasets: [{
+      data: tx7jData.map(d => d.count),
+      backgroundColor: 'rgba(41,121,255,0.5)',
+      borderColor: '#2979FF',
+      borderWidth: 1.5,
+      borderRadius: 5,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false } },
+      y: { beginAtZero: true, ticks: { precision: 0 } }
+    }
+  }
+});
+
+// ── Packs donut ──
+const packsData = {{ abo_par_pack|safe }};
+if (packsData.length) {
+  new Chart(document.getElementById('chartPacks'), {
+    type: 'doughnut',
+    data: {
+      labels: packsData.map(d => d.pack__nom),
+      datasets: [{
+        data: packsData.map(d => d.total),
+        backgroundColor: ['#555a6a', '#22c55e', '#f59e0b'],
+        borderWidth: 0,
+        hoverOffset: 4,
+      }]
+    },
+    options: {
+      cutout: '70%',
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+</script>
+{% endblock %}

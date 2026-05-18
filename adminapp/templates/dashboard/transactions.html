@@ -1,0 +1,101 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Transactions{% endblock %}
+{% block header_title %}Transactions{% endblock %}
+{% block breadcrumb %}Gestion › Transactions{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div>
+    <div class="page-heading">Transactions 💸</div>
+    <div class="page-sub">{{ total }} résultat{{ total|pluralize }}</div>
+  </div>
+  {% if totaux.total_montant %}
+  <div style="text-align:right">
+    <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--text)">
+      {{ totaux.total_montant|floatformat:0 }} XOF
+    </div>
+    <div style="font-size:12px;color:var(--text3)">Volume total filtré</div>
+    <div style="font-size:12px;color:var(--green);margin-top:2px">
+      Commissions : {{ totaux.total_commissions|default:0|floatformat:0 }} XOF
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<form method="get" style="margin-bottom:20px">
+  <div class="filters" style="flex-wrap:wrap;gap:10px">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" name="q" value="{{ q }}" placeholder="Numéro client, référence, boutique…">
+    </div>
+    <select name="type">
+      <option value="">Tous types</option>
+      <option value="Depot"   {% if type_filtre == 'Depot' %}selected{% endif %}>Dépôt</option>
+      <option value="Retrait" {% if type_filtre == 'Retrait' %}selected{% endif %}>Retrait</option>
+      <option value="Credit"  {% if type_filtre == 'Credit' %}selected{% endif %}>Crédit</option>
+    </select>
+    <select name="operateur">
+      <option value="">Tous opérateurs</option>
+      <option value="MTN"     {% if op_filtre == 'MTN' %}selected{% endif %}>MTN</option>
+      <option value="Moov"    {% if op_filtre == 'Moov' %}selected{% endif %}>Moov</option>
+      <option value="Celtiis" {% if op_filtre == 'Celtiis' %}selected{% endif %}>Celtiis</option>
+    </select>
+    <input type="date" name="date_debut" value="{{ date_debut }}" title="Date début">
+    <input type="date" name="date_fin"   value="{{ date_fin }}"   title="Date fin">
+    <button type="submit" class="btn btn-primary">Filtrer</button>
+    <a href="{% url 'dashboard:transactions' %}" class="btn btn-ghost">Reset</a>
+  </div>
+</form>
+
+<div class="panel">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Boutique</th>
+          <th>Opérateur</th>
+          <th>Montant</th>
+          <th>Commission</th>
+          <th>N° Client</th>
+          <th>Nom client</th>
+          <th>Référence</th>
+          <th>Par</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in transactions %}
+        <tr>
+          <td>
+            {% if tx.type == 'Depot' %}<span class="badge badge-green">↑ Dépôt</span>
+            {% elif tx.type == 'Retrait' %}<span class="badge badge-red">↓ Retrait</span>
+            {% else %}<span class="badge badge-blue">◈ Crédit</span>{% endif %}
+          </td>
+          <td><a href="{% url 'dashboard:boutique_detail' tx.boutique.id %}" class="link">{{ tx.boutique.nom }}</a></td>
+          <td><span class="badge badge-gray">{{ tx.operateur }}</span></td>
+          <td class="td-main">{{ tx.montant|floatformat:0 }}</td>
+          <td style="color:var(--green)">+{{ tx.commission|floatformat:0 }}</td>
+          <td style="font-size:12px">{{ tx.numero_client }}</td>
+          <td style="font-size:12px;color:var(--text2)">{{ tx.nom_client|default:"—" }}</td>
+          <td style="font-size:11px;color:var(--text3);font-family:monospace">{{ tx.reference|default:"—" }}</td>
+          <td style="font-size:12px;color:var(--text2)">
+            {% if tx.effectuee_par %}{{ tx.effectuee_par.prenom }}{% else %}—{% endif %}
+          </td>
+          <td style="font-size:11px;color:var(--text3);white-space:nowrap">{{ tx.date|date:"d/m/y H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="empty">Aucune transaction trouvée</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if total > 100 %}
+  <div style="padding:12px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text3)">
+    Affichage des 100 premières transactions sur {{ total }}. Utilisez les filtres pour affiner.
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

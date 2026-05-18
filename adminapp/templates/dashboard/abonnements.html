@@ -1,0 +1,111 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Abonnements{% endblock %}
+{% block header_title %}Abonnements{% endblock %}
+{% block breadcrumb %}Monétisation › Abonnements{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div>
+    <div class="page-heading">Abonnements 📦</div>
+    <div class="page-sub">{{ total }} abonnement{{ total|pluralize }}</div>
+  </div>
+</div>
+
+<!-- Répartition packs -->
+<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px">
+  {% for ap in abo_par_pack %}
+  <div class="kpi-card" style="--accent-color:{% if ap.pack__cle == 'basic' %}#555a6a{% elif ap.pack__cle == 'pro' %}#22c55e{% else %}#f59e0b{% endif %}">
+    <div class="kpi-value">{{ ap.total }}</div>
+    <div class="kpi-label">{{ ap.pack__nom }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<form method="get" style="margin-bottom:20px">
+  <div class="filters">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" name="q" value="{{ q }}" placeholder="Email utilisateur…">
+    </div>
+    <select name="filtre" onchange="this.form.submit()">
+      <option value="actifs"   {% if filtre == 'actifs' %}selected{% endif %}>Actifs</option>
+      <option value="expires"  {% if filtre == 'expires' %}selected{% endif %}>Expirés</option>
+      <option value="annules"  {% if filtre == 'annules' %}selected{% endif %}>Annulés</option>
+      <option value="tous"     {% if filtre == 'tous' %}selected{% endif %}>Tous</option>
+    </select>
+    <button type="submit" class="btn btn-primary">Filtrer</button>
+    <a href="{% url 'dashboard:abonnements' %}" class="btn btn-ghost">Reset</a>
+  </div>
+</form>
+
+<div class="panel">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Utilisateur</th>
+          <th>Pack</th>
+          <th>Statut</th>
+          <th>Début</th>
+          <th>Fin</th>
+          <th>Période gratuite</th>
+          <th>Souscrit le</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for abo in abonnements %}
+        <tr>
+          <td>
+            <a href="{% url 'dashboard:utilisateur_detail' abo.utilisateur.id %}" class="link td-main">
+              {{ abo.utilisateur.prenom }} {{ abo.utilisateur.nom }}
+            </a>
+            <div style="font-size:11px;color:var(--text3)">{{ abo.utilisateur.email }}</div>
+          </td>
+          <td>
+            {% if abo.pack.cle == 'basic' %}
+            <span class="badge badge-gray">Basic</span>
+            {% elif abo.pack.cle == 'pro' %}
+            <span class="badge badge-green">Pro</span>
+            {% else %}
+            <span class="badge badge-amber">Premium</span>
+            {% endif %}
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">{{ abo.pack.prix_mensuel|floatformat:0 }} XOF/mois</div>
+          </td>
+          <td>
+            {% if abo.statut == 'actif' %}
+            <span class="badge badge-green">● Actif</span>
+            {% elif abo.statut == 'expire' %}
+            <span class="badge badge-red">● Expiré</span>
+            {% elif abo.statut == 'annule' %}
+            <span class="badge badge-gray">● Annulé</span>
+            {% else %}
+            <span class="badge badge-amber">● En attente</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px">{{ abo.debut|date:"d/m/Y" }}</td>
+          <td style="font-size:12px">
+            {% if abo.fin.year == 9999 %}
+            <span style="color:var(--green)">Illimité</span>
+            {% else %}
+            {{ abo.fin|date:"d/m/Y" }}
+            {% endif %}
+          </td>
+          <td style="font-size:12px">
+            {% if abo.fin_periode_gratuite %}
+            {{ abo.fin_periode_gratuite|date:"d/m/Y" }}
+            {% else %}
+            <span style="color:var(--text3)">—</span>
+            {% endif %}
+          </td>
+          <td style="font-size:11px;color:var(--text3)">{{ abo.cree_le|date:"d/m/Y" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="empty">Aucun abonnement trouvé</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

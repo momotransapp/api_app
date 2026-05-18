@@ -1,0 +1,100 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Avis{% endblock %}
+{% block header_title %}Avis utilisateurs{% endblock %}
+{% block breadcrumb %}Support › Avis{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div>
+    <div class="page-heading">Avis utilisateurs 💬</div>
+    <div class="page-sub">
+      {{ total }} avis
+      {% if non_lus > 0 %}
+      · <span style="color:var(--red);font-weight:500">{{ non_lus }} non lu{{ non_lus|pluralize }}</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Filtres -->
+<div style="display:flex;gap:8px;margin-bottom:24px">
+  <a href="?filtre=tous"    class="btn {% if filtre == 'tous' %}btn-primary{% else %}btn-ghost{% endif %}">Tous ({{ total }})</a>
+  <a href="?filtre=non_lus" class="btn {% if filtre == 'non_lus' %}btn-primary{% else %}btn-ghost{% endif %}">
+    Non lus
+    {% if non_lus > 0 %}<span style="background:var(--red);color:#fff;padding:1px 6px;border-radius:10px;font-size:10px">{{ non_lus }}</span>{% endif %}
+  </a>
+  <a href="?filtre=lus"     class="btn {% if filtre == 'lus' %}btn-primary{% else %}btn-ghost{% endif %}">Lus</a>
+</div>
+
+{% if avis_list %}
+<div style="display:flex;flex-direction:column;gap:12px">
+  {% for a in avis_list %}
+  <div class="panel" style="{% if not a.lu %}border-color:rgba(41,121,255,0.3);{% endif %}">
+    <div style="padding:18px 20px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:12px">
+          {% if a.utilisateur %}
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#2979FF,#a855f7);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">
+            {{ a.utilisateur.prenom.0 }}{{ a.utilisateur.nom.0 }}
+          </div>
+          <div>
+            <div style="font-weight:500;color:var(--text);font-size:14px">
+              <a href="{% url 'dashboard:utilisateur_detail' a.utilisateur.id %}" class="link">
+                {{ a.utilisateur.prenom }} {{ a.utilisateur.nom }}
+              </a>
+            </div>
+            <div style="font-size:11px;color:var(--text3)">{{ a.utilisateur.email }}</div>
+          </div>
+          {% else %}
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">👤</div>
+          <div style="font-size:13px;color:var(--text2)">Utilisateur supprimé</div>
+          {% endif %}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <span style="font-size:11px;color:var(--text3)">{{ a.cree_le|date:"d/m/Y à H:i" }}</span>
+          {% if a.lu %}
+          <span class="badge badge-green">✓ Lu</span>
+          {% else %}
+          <span class="badge badge-blue">● Nouveau</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="font-size:14px;color:var(--text);line-height:1.7;padding:14px;background:var(--bg3);border-radius:10px;border:1px solid var(--border)">
+        {{ a.message }}
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:12px">
+        {% if not a.lu %}
+        <form method="post" action="?filtre={{ filtre }}" style="display:inline">
+          {% csrf_token %}
+          <input type="hidden" name="avis_id" value="{{ a.id }}">
+          <input type="hidden" name="action" value="marquer_lu">
+          <button type="submit" class="btn btn-success btn-sm">✓ Marquer comme lu</button>
+        </form>
+        {% endif %}
+        <form method="post" action="?filtre={{ filtre }}" style="display:inline"
+              onsubmit="return confirm('Supprimer cet avis ?')">
+          {% csrf_token %}
+          <input type="hidden" name="avis_id" value="{{ a.id }}">
+          <input type="hidden" name="action" value="supprimer">
+          <button type="submit" class="btn btn-danger btn-sm">🗑 Supprimer</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="panel">
+  <div class="empty" style="padding:64px">
+    <div style="font-size:40px;margin-bottom:12px">💬</div>
+    Aucun avis
+    {% if filtre != 'tous' %}dans cette catégorie{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

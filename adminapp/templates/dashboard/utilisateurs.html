@@ -1,0 +1,107 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Utilisateurs{% endblock %}
+{% block header_title %}Utilisateurs{% endblock %}
+{% block breadcrumb %}Gestion › Utilisateurs{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div>
+    <div class="page-heading">Utilisateurs 👥</div>
+    <div class="page-sub">{{ total }} compte{{ total|pluralize }} trouvé{{ total|pluralize }}</div>
+  </div>
+</div>
+
+<!-- Filtres -->
+<form method="get" style="margin-bottom:20px">
+  <div class="filters">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" name="q" value="{{ q }}" placeholder="Email, nom, prénom…">
+    </div>
+    <select name="filtre" onchange="this.form.submit()">
+      <option value="tous"       {% if filtre == 'tous' %}selected{% endif %}>Tous</option>
+      <option value="verifie"    {% if filtre == 'verifie' %}selected{% endif %}>Vérifiés</option>
+      <option value="non_verifie"{% if filtre == 'non_verifie' %}selected{% endif %}>Non vérifiés</option>
+      <option value="staff"      {% if filtre == 'staff' %}selected{% endif %}>Staff</option>
+    </select>
+    <button type="submit" class="btn btn-primary">Filtrer</button>
+    {% if q or filtre != 'tous' %}
+    <a href="{% url 'dashboard:utilisateurs' %}" class="btn btn-ghost">Réinitialiser</a>
+    {% endif %}
+  </div>
+</form>
+
+<div class="panel">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Utilisateur</th>
+          <th>Email</th>
+          <th>Téléphone</th>
+          <th>Statut</th>
+          <th>Pack</th>
+          <th>Inscription</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#2979FF,#a855f7);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">
+                {{ u.prenom.0 }}{{ u.nom.0 }}
+              </div>
+              <div>
+                <div class="td-main">{{ u.prenom }} {{ u.nom }}</div>
+                {% if u.is_staff %}<div style="font-size:10px;color:var(--amber)">⭐ Staff</div>{% endif %}
+              </div>
+            </div>
+          </td>
+          <td>{{ u.email }}</td>
+          <td>{{ u.telephone|default:"—" }}</td>
+          <td>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              {% if u.is_active %}
+              <span class="badge badge-green">● Actif</span>
+              {% else %}
+              <span class="badge badge-red">● Inactif</span>
+              {% endif %}
+              {% if u.is_verified %}
+              <span class="badge badge-cyan" style="font-size:10px">✓ Vérifié</span>
+              {% else %}
+              <span class="badge badge-amber" style="font-size:10px">⚠ Non vérifié</span>
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            {% with abo=u.abonnements.first %}
+            {% if abo %}
+              {% if abo.pack.cle == 'basic' %}
+              <span class="badge badge-gray">Basic</span>
+              {% elif abo.pack.cle == 'pro' %}
+              <span class="badge badge-green">Pro</span>
+              {% else %}
+              <span class="badge badge-amber">Premium</span>
+              {% endif %}
+            {% else %}
+              <span style="color:var(--text3)">—</span>
+            {% endif %}
+            {% endwith %}
+          </td>
+          <td style="font-size:12px;color:var(--text3)">{{ u.date_inscription|date:"d/m/Y" }}</td>
+          <td>
+            <a href="{% url 'dashboard:utilisateur_detail' u.id %}" class="btn btn-ghost btn-sm">Voir →</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="empty">Aucun utilisateur trouvé</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Boutiques{% endblock %}
+{% block header_title %}Boutiques{% endblock %}
+{% block breadcrumb %}Gestion › Boutiques{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div>
+    <div class="page-heading">Boutiques 🏪</div>
+    <div class="page-sub">{{ total }} boutique{{ total|pluralize }} trouvée{{ total|pluralize }}</div>
+  </div>
+</div>
+
+<form method="get" style="margin-bottom:20px">
+  <div class="filters">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" name="q" value="{{ q }}" placeholder="Nom de boutique, email propriétaire…">
+    </div>
+    <select name="filtre" onchange="this.form.submit()">
+      <option value="toutes"   {% if filtre == 'toutes' %}selected{% endif %}>Toutes</option>
+      <option value="actives"  {% if filtre == 'actives' %}selected{% endif %}>Actives</option>
+      <option value="inactives"{% if filtre == 'inactives' %}selected{% endif %}>Inactives</option>
+    </select>
+    <button type="submit" class="btn btn-primary">Filtrer</button>
+    {% if q or filtre != 'actives' %}
+    <a href="{% url 'dashboard:boutiques' %}" class="btn btn-ghost">Réinitialiser</a>
+    {% endif %}
+  </div>
+</form>
+
+<div class="panel">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Boutique</th>
+          <th>Propriétaire</th>
+          <th>Membres</th>
+          <th>Transactions</th>
+          <th>Statut</th>
+          <th>Créée le</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in boutiques %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:30px;height:30px;border-radius:8px;background:{{ b.couleur }};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🏪</div>
+              <div class="td-main">{{ b.nom }}</div>
+            </div>
+          </td>
+          <td>
+            <a href="{% url 'dashboard:utilisateur_detail' b.proprietaire.id %}" class="link">
+              {{ b.proprietaire.prenom }} {{ b.proprietaire.nom }}
+            </a>
+          </td>
+          <td><span class="badge badge-blue">{{ b.nb_membres }}</span></td>
+          <td><span class="badge badge-gray">{{ b.nb_transactions }}</span></td>
+          <td>
+            {% if b.active %}
+            <span class="badge badge-green">● Active</span>
+            {% else %}
+            <span class="badge badge-red">● Inactive</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--text3)">{{ b.cree_le|date:"d/m/Y" }}</td>
+          <td><a href="{% url 'dashboard:boutique_detail' b.id %}" class="btn btn-ghost btn-sm">Voir →</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="empty">Aucune boutique trouvée</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

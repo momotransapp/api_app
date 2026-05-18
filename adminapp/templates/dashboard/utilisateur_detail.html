@@ -1,0 +1,230 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}{{ u.prenom }} {{ u.nom }}{% endblock %}
+{% block header_title %}Profil utilisateur{% endblock %}
+{% block breadcrumb %}Utilisateurs › {{ u.prenom }} {{ u.nom }}{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div style="display:flex;align-items:center;gap:16px">
+    <a href="{% url 'dashboard:utilisateurs' %}" class="btn btn-ghost btn-sm">← Retour</a>
+    <div>
+      <div class="page-heading">{{ u.prenom }} {{ u.nom }}</div>
+      <div class="page-sub">{{ u.email }}</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <form method="post" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="toggle_active">
+      <button type="submit" class="btn {% if u.is_active %}btn-danger{% else %}btn-success{% endif %} btn-sm">
+        {% if u.is_active %}Désactiver{% else %}Activer{% endif %}
+      </button>
+    </form>
+    <form method="post" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="toggle_verified">
+      <button type="submit" class="btn btn-ghost btn-sm">
+        {% if u.is_verified %}Dé-vérifier{% else %}Vérifier{% endif %}
+      </button>
+    </form>
+    {% if not u.is_superuser %}
+    <form method="post" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="toggle_staff">
+      <button type="submit" class="btn btn-ghost btn-sm">
+        {% if u.is_staff %}Retirer staff{% else %}Passer staff{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid-2" style="margin-bottom:20px">
+
+  <!-- Infos principales -->
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Informations</div></div>
+    <div class="panel-body">
+      <table style="width:100%">
+        <tbody>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:8px 0;width:140px">ID</td>
+            <td style="font-size:11px;color:var(--text2);font-family:monospace">{{ u.id }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:8px 0">Nom complet</td>
+            <td class="td-main">{{ u.prenom }} {{ u.nom }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:8px 0">Email</td>
+            <td>{{ u.email }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:8px 0">Téléphone</td>
+            <td>{{ u.telephone|default:"Non renseigné" }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:8px 0">Inscription</td>
+            <td>{{ u.date_inscription|date:"d/m/Y à H:i" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Statuts -->
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Statuts & droits</div></div>
+    <div class="panel-body">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;color:var(--text2)">Compte actif</span>
+          {% if u.is_active %}
+          <span class="badge badge-green">✓ Oui</span>
+          {% else %}
+          <span class="badge badge-red">✕ Non</span>
+          {% endif %}
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;color:var(--text2)">Email vérifié</span>
+          {% if u.is_verified %}
+          <span class="badge badge-green">✓ Oui</span>
+          {% else %}
+          <span class="badge badge-amber">✕ Non</span>
+          {% endif %}
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;color:var(--text2)">Accès staff</span>
+          {% if u.is_staff %}
+          <span class="badge badge-purple">✓ Oui</span>
+          {% else %}
+          <span class="badge badge-gray">✕ Non</span>
+          {% endif %}
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;color:var(--text2)">Superuser</span>
+          {% if u.is_superuser %}
+          <span class="badge badge-amber">✓ Oui</span>
+          {% else %}
+          <span class="badge badge-gray">✕ Non</span>
+          {% endif %}
+        </div>
+
+        <hr class="divider">
+
+        <!-- Abonnement actif -->
+        <div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Abonnement actuel</div>
+          {% with abo=abonnements.first %}
+          {% if abo %}
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="td-main">{{ abo.pack.nom }}</span>
+              {% if abo.statut == 'actif' %}
+              <span class="badge badge-green">Actif</span>
+              {% else %}
+              <span class="badge badge-red">{{ abo.statut }}</span>
+              {% endif %}
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">
+              Du {{ abo.debut|date:"d/m/Y" }} au {{ abo.fin|date:"d/m/Y" }}
+            </div>
+          </div>
+          {% else %}
+          <span style="color:var(--text3);font-size:13px">Aucun abonnement</span>
+          {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Boutiques -->
+<div class="panel" style="margin-bottom:20px">
+  <div class="panel-header">
+    <div class="panel-title">Boutiques ({{ boutiques.count }})</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Boutique</th><th>Rôle</th><th>Depuis</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for m in boutiques %}
+        <tr>
+          <td class="td-main">{{ m.boutique.nom }}</td>
+          <td>
+            {% if m.role == 'proprietaire' %}
+            <span class="badge badge-amber">Propriétaire</span>
+            {% elif m.role == 'gerant' %}
+            <span class="badge badge-blue">Gérant</span>
+            {% else %}
+            <span class="badge badge-purple">Admin</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--text3)">{{ m.ajoute_le|date:"d/m/Y" }}</td>
+          <td><a href="{% url 'dashboard:boutique_detail' m.boutique.id %}" class="btn btn-ghost btn-sm">Voir →</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="empty">Aucune boutique</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Transactions récentes -->
+<div class="panel" style="margin-bottom:20px">
+  <div class="panel-header">
+    <div class="panel-title">Dernières transactions effectuées</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Type</th><th>Boutique</th><th>Opérateur</th><th>Montant</th><th>Date</th></tr>
+      </thead>
+      <tbody>
+        {% for tx in transactions %}
+        <tr>
+          <td>
+            {% if tx.type == 'Depot' %}<span class="badge badge-green">↑ Dépôt</span>
+            {% elif tx.type == 'Retrait' %}<span class="badge badge-red">↓ Retrait</span>
+            {% else %}<span class="badge badge-blue">◈ Crédit</span>{% endif %}
+          </td>
+          <td>{{ tx.boutique.nom }}</td>
+          <td><span class="badge badge-gray">{{ tx.operateur }}</span></td>
+          <td class="td-main">{{ tx.montant|floatformat:0 }} XOF</td>
+          <td style="font-size:12px;color:var(--text3)">{{ tx.date|date:"d/m/Y H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="empty">Aucune transaction</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Avis -->
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">Avis soumis ({{ avis.count }})</div>
+  </div>
+  <div class="panel-body">
+    {% for a in avis %}
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:11px;color:var(--text3)">{{ a.cree_le|date:"d/m/Y à H:i" }}</span>
+        {% if a.lu %}<span class="badge badge-green" style="font-size:10px">✓ Lu</span>
+        {% else %}<span class="badge badge-amber" style="font-size:10px">Non lu</span>{% endif %}
+      </div>
+      <div style="font-size:13.5px;color:var(--text);line-height:1.6">{{ a.message }}</div>
+    </div>
+    {% empty %}
+    <div class="empty" style="padding:24px">Aucun avis soumis</div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}

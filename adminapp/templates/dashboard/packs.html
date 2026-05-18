@@ -1,0 +1,106 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Packs{% endblock %}
+{% block header_title %}Packs{% endblock %}
+{% block breadcrumb %}Monétisation › Packs{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div>
+    <div class="page-heading">Packs ⭐</div>
+    <div class="page-sub">Configuration des offres d'abonnement</div>
+  </div>
+</div>
+
+<div class="grid-3">
+  {% for pack in packs %}
+  <div class="panel" style="
+    {% if pack.cle == 'pro' %}border-color:rgba(34,197,94,0.3);{% endif %}
+    {% if pack.cle == 'premium' %}border-color:rgba(245,158,11,0.3);{% endif %}
+  ">
+    <div class="panel-header" style="
+      background:{% if pack.cle == 'basic' %}var(--bg3){% elif pack.cle == 'pro' %}rgba(34,197,94,0.06){% else %}rgba(245,158,11,0.06){% endif %};
+    ">
+      <div>
+        <div style="font-size:20px;margin-bottom:6px">
+          {% if pack.cle == 'basic' %}🔷{% elif pack.cle == 'pro' %}🔶{% else %}💎{% endif %}
+        </div>
+        <div class="panel-title" style="font-size:18px">{{ pack.nom }}</div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);margin-top:4px">
+          {% if pack.prix_mensuel == 0 %}
+          Gratuit
+          {% else %}
+          {{ pack.prix_mensuel|floatformat:0 }} <span style="font-size:12px;color:var(--text3);font-weight:400">XOF/mois</span>
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        {% if pack.actif %}
+        <span class="badge badge-green">Actif</span>
+        {% else %}
+        <span class="badge badge-gray">Inactif</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="panel-body">
+
+      <!-- Abonnés -->
+      <div style="text-align:center;padding:16px 0;border-bottom:1px solid var(--border);margin-bottom:16px">
+        <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--text)">{{ pack.nb_abonnes }}</div>
+        <div style="font-size:12px;color:var(--text3)">abonné{{ pack.nb_abonnes|pluralize }} actif{{ pack.nb_abonnes|pluralize }}</div>
+      </div>
+
+      <!-- Features -->
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;color:var(--text2)">Boutiques max</span>
+          <span class="td-main">{% if pack.max_boutiques == -1 %}∞ Illimité{% else %}{{ pack.max_boutiques }}{% endif %}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;color:var(--text2)">Utilisateurs max</span>
+          <span class="td-main">{% if pack.max_utilisateurs == -1 %}∞ Illimité{% else %}{{ pack.max_utilisateurs }}{% endif %}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;color:var(--text2)">Rapports avancés</span>
+          {% if pack.rapports_avances %}
+          <span class="badge badge-green">✓ Oui</span>
+          {% else %}
+          <span class="badge badge-gray">✕ Non</span>
+          {% endif %}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;color:var(--text2)">1er mois offert</span>
+          {% if pack.premier_mois_offert %}
+          <span class="badge badge-green">✓ Oui</span>
+          {% else %}
+          <span class="badge badge-gray">✕ Non</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if pack.description %}
+      <hr class="divider">
+      <div style="font-size:12.5px;color:var(--text2);line-height:1.6">{{ pack.description }}</div>
+      {% endif %}
+
+      <div style="margin-top:16px">
+        <a href="{% url 'dashboard:abonnements' %}?filtre=actifs" class="btn btn-ghost" style="width:100%;justify-content:center">
+          Voir les abonnés →
+        </a>
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="panel" style="grid-column:1/-1">
+    <div class="empty">Aucun pack configuré</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Note -->
+<div style="background:rgba(41,121,255,0.06);border:1px solid rgba(41,121,255,0.15);border-radius:var(--radius-lg);padding:16px 20px;font-size:13px;color:var(--text2);margin-top:4px">
+  <span style="color:var(--accent)">ℹ</span> &nbsp;
+  Pour modifier les packs (prix, limites, features), utilisez le panneau d'administration Django standard ou l'interface base de données.
+</div>
+
+{% endblock %}
