@@ -11,7 +11,7 @@
     <div class="page-sub">{{ total }} résultat{{ total|pluralize }}</div>
   </div>
   {% if totaux.total_montant %}
-  <div style="text-align:right">
+  <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
     <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--text)">
       {{ totaux.total_montant|floatformat:0 }} XOF
     </div>
@@ -58,6 +58,8 @@
           <th>Opérateur</th>
           <th>Montant</th>
           <th>Commission</th>
+          <th style="text-align:center">Impact Opérateur</th>
+          <th style="text-align:center">Impact Caisse</th>
           <th>N° Client</th>
           <th>Nom client</th>
           <th>Référence</th>
@@ -67,16 +69,32 @@
       </thead>
       <tbody>
         {% for tx in transactions %}
-        <tr>
+        <tr style="cursor:pointer" onclick="window.location='{% url 'dashboard:transaction_detail' tx.id %}'">
           <td>
             {% if tx.type == 'Depot' %}<span class="badge badge-green">↑ Dépôt</span>
             {% elif tx.type == 'Retrait' %}<span class="badge badge-red">↓ Retrait</span>
             {% else %}<span class="badge badge-blue">◈ Crédit</span>{% endif %}
           </td>
-          <td><a href="{% url 'dashboard:boutique_detail' tx.boutique.id %}" class="link">{{ tx.boutique.nom }}</a></td>
+          <td><a href="{% url 'dashboard:boutique_detail' tx.boutique.id %}" class="link" onclick="event.stopPropagation()">{{ tx.boutique.nom }}</a></td>
           <td><span class="badge badge-gray">{{ tx.operateur }}</span></td>
-          <td class="td-main">{{ tx.montant|floatformat:0 }}</td>
+          <td class="td-main">{{ tx.montant|floatformat:0 }} XOF</td>
           <td style="color:var(--green)">+{{ tx.commission|floatformat:0 }}</td>
+          <!-- Impact Opérateur -->
+          <td style="text-align:center">
+            {% if tx.type == 'Retrait' %}
+            <span style="color:var(--green);font-weight:600">↑ +{{ tx.montant|floatformat:0 }}</span>
+            {% elif tx.type in 'Depot,Credit' %}
+            <span style="color:var(--red);font-weight:600">↓ -{{ tx.montant|floatformat:0 }}</span>
+            {% endif %}
+          </td>
+          <!-- Impact Caisse -->
+          <td style="text-align:center">
+            {% if tx.type in 'Depot,Credit' %}
+            <span style="color:var(--green);font-weight:600">↑ +{{ tx.montant|floatformat:0 }}</span>
+            {% elif tx.type == 'Retrait' %}
+            <span style="color:var(--red);font-weight:600">↓ -{{ tx.montant|floatformat:0 }}</span>
+            {% endif %}
+          </td>
           <td style="font-size:12px">{{ tx.numero_client }}</td>
           <td style="font-size:12px;color:var(--text2)">{{ tx.nom_client|default:"—" }}</td>
           <td style="font-size:11px;color:var(--text3);font-family:monospace">{{ tx.reference|default:"—" }}</td>
@@ -86,7 +104,7 @@
           <td style="font-size:11px;color:var(--text3);white-space:nowrap">{{ tx.date|date:"d/m/y H:i" }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="10" class="empty">Aucune transaction trouvée</td></tr>
+        <tr><td colspan="12" class="empty">Aucune transaction trouvée</td></tr>
         {% endfor %}
       </tbody>
     </table>

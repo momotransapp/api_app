@@ -3,25 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Connexion — MobileMoney Admin</title>
+<title>Connexion — MomoTrans Admin</title>
+{% load static %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:     #0a0c10;
-  --bg2:    #111318;
-  --border: rgba(255,255,255,0.08);
-  --text:   #e8eaf0;
-  --text2:  #8a8fa0;
-  --text3:  #555a6a;
-  --accent: #2979FF;
+  --bg:     #ffffff;
+  --bg2:    #f8f9fa;
+  --border: rgba(0,0,0,0.08);
+  --text:   #2c3e50;
+  --text2:  #7f8c8d;
+  --text3:  #95a5a6;
+  --accent: #1E88E5;
+  --amber:  #FB8C00;
+  --green:  #43A047;
 }
 
 body {
   font-family: 'DM Sans', sans-serif;
-  background: var(--bg);
+  background: linear-gradient(135deg, #f0f2f5 0%, #ffffff 100%);
   color: var(--text);
   min-height: 100vh;
   display: flex;
@@ -37,8 +40,8 @@ body::before {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(41,121,255,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(41,121,255,0.04) 1px, transparent 1px);
+    linear-gradient(rgba(30,136,229,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30,136,229,0.04) 1px, transparent 1px);
   background-size: 48px 48px;
 }
 
@@ -49,7 +52,7 @@ body::after {
   top: -200px; left: 50%;
   transform: translateX(-50%);
   width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(41,121,255,0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(30,136,229,0.15) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -67,13 +70,19 @@ body::after {
 }
 
 .logo-icon {
-  width: 52px; height: 52px;
-  background: var(--accent);
+  width: 80px; height: 80px;
+  background: transparent;
   border-radius: 14px;
   display: flex; align-items: center; justify-content: center;
   font-size: 24px;
   margin: 0 auto 14px;
-  box-shadow: 0 0 40px rgba(41,121,255,0.3);
+  overflow: hidden;
+}
+
+.logo-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .logo-name {
@@ -81,6 +90,10 @@ body::after {
   font-weight: 800;
   font-size: 22px;
   color: var(--text);
+  background: linear-gradient(135deg, var(--accent), var(--amber));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .logo-desc {
@@ -90,10 +103,11 @@ body::after {
 }
 
 .login-card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.1);
   border-radius: 18px;
   padding: 32px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.08);
 }
 
 .login-title {
@@ -123,8 +137,8 @@ body::after {
 
 .field input {
   width: 100%;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border);
+  background: #ffffff;
+  border: 2px solid #f0f2f5;
   border-radius: 10px;
   padding: 12px 14px;
   color: var(--text);
@@ -136,16 +150,16 @@ body::after {
 
 .field input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(41,121,255,0.12);
+  box-shadow: 0 0 0 3px rgba(30,136,229,0.12);
 }
 
 .field input::placeholder { color: var(--text3); }
 
 .error-msg {
   display: flex; align-items: center; gap: 8px;
-  background: rgba(239,68,68,0.08);
-  border: 1px solid rgba(239,68,68,0.2);
-  color: #f87171;
+  background: rgba(229, 57, 53, 0.08);
+  border: 1px solid rgba(229, 57, 53, 0.2);
+  color: #d32f2f;
   padding: 10px 14px;
   border-radius: 10px;
   font-size: 13px;
@@ -154,7 +168,7 @@ body::after {
 
 .submit-btn {
   width: 100%;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), #1565C0);
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -165,12 +179,12 @@ body::after {
   cursor: pointer;
   margin-top: 8px;
   transition: all 0.2s;
-  box-shadow: 0 4px 20px rgba(41,121,255,0.25);
+  box-shadow: 0 4px 20px rgba(30,136,229,0.3);
 }
 
 .submit-btn:hover {
-  background: #1a56d4;
-  box-shadow: 0 4px 28px rgba(41,121,255,0.4);
+  background: linear-gradient(135deg, #1565C0, #0D47A1);
+  box-shadow: 0 4px 28px rgba(30,136,229,0.4);
   transform: translateY(-1px);
 }
 
@@ -183,14 +197,128 @@ body::after {
   color: var(--text3);
   display: flex; align-items: center; justify-content: center; gap: 6px;
 }
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 576px) {
+  .login-wrap {
+    max-width: 100%;
+    padding: 16px;
+  }
+
+  .login-logo {
+    margin-bottom: 28px;
+  }
+
+  .logo-icon {
+    width: 64px;
+    height: 64px;
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+
+  .logo-text {
+    font-size: 20px;
+  }
+
+  .logo-desc {
+    font-size: 13px;
+  }
+
+  .login-card {
+    padding: 24px 16px;
+  }
+
+  .login-title {
+    font-size: 18px;
+  }
+
+  .login-sub {
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+
+  .field {
+    margin-bottom: 14px;
+  }
+
+  .field label {
+    font-size: 12px;
+    margin-bottom: 5px;
+  }
+
+  .field input {
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+
+  .submit-btn {
+    font-size: 13px;
+    padding: 10px 16px;
+  }
+
+  .error-msg {
+    font-size: 12px;
+    padding: 10px 12px;
+  }
+
+  .admin-note {
+    font-size: 11px;
+    margin-top: 16px;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  body::before {
+    background-size: 32px 32px;
+  }
+
+  body::after {
+    width: 400px;
+    height: 400px;
+    top: -150px;
+  }
+}
+
+@media (max-width: 400px) {
+  .login-wrap {
+    padding: 12px;
+  }
+
+  .login-logo {
+    margin-bottom: 20px;
+  }
+
+  .logo-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .login-card {
+    padding: 20px 12px;
+  }
+
+  .login-title {
+    font-size: 16px;
+  }
+
+  .field input {
+    font-size: 16px;
+  }
+
+  .submit-btn {
+    font-size: 12px;
+    padding: 9px 12px;
+  }
+}
+
 </style>
 </head>
 <body>
 
 <div class="login-wrap">
   <div class="login-logo">
-    <div class="logo-icon">💱</div>
-    <div class="logo-name">MobileMoney</div>
+    <div class="logo-icon"><img src="{% static 'logo.png' %}" alt="MomoTrans"></div>
+
     <div class="logo-desc">Panneau d'administration</div>
   </div>
 

@@ -13,9 +13,9 @@
 </div>
 
 <!-- Répartition packs -->
-<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px">
+<div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:24px">
   {% for ap in abo_par_pack %}
-  <div class="kpi-card" style="--accent-color:{% if ap.pack__cle == 'basic' %}#555a6a{% elif ap.pack__cle == 'pro' %}#22c55e{% else %}#f59e0b{% endif %}">
+  <div class="kpi-card" style="--accent-color:{% if ap.pack__cle == 'basic' %}#95a5a6{% elif ap.pack__cle == 'pro' %}#43A047{% else %}#FB8C00{% endif %}">
     <div class="kpi-value">{{ ap.total }}</div>
     <div class="kpi-label">{{ ap.pack__nom }}</div>
   </div>

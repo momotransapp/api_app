@@ -219,3 +219,9 @@ class AvisSerializer(serializers.ModelSerializer):
 
     def get_utilisateur_email(self, obj):
         return obj.utilisateur.email if obj.utilisateur else None
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Notification
+        fields = ['id', 'type', 'titre', 'message', 'lu', 'cree_le', 'boutique']
+        read_only_fields = ['id', 'cree_le']
+ 

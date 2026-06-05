@@ -17,7 +17,29 @@ from .permissions import (
 )
 from django.db.models import Sum, Q
 
-
+def creer_notification(utilisateur, type_notif: str, titre: str, message: str = '', boutique=None):
+    """
+    Crée une notification pour un utilisateur.
+    À appeler après chaque action importante (POST transaction, DELETE, PATCH…).
+ 
+    Exemple d'utilisation dans views.py :
+        creer_notification(
+            utilisateur=request.user,
+            type_notif='suppression',
+            titre="Suppression d'une opération de dépôt",
+            boutique=boutique,
+        )
+    """
+    from .models import Notification
+    Notification.objects.create(
+        utilisateur=utilisateur,
+        boutique=boutique,
+        type=type_notif,
+        titre=titre,
+        message=message,
+    )
+ 
+ 
 # ── Utilitaire : génération de code à 6 chiffres ──────────────────────────
 def generer_code():
     return ''.join(random.choices(string.digits, k=6))
@@ -653,16 +675,39 @@ def transactions_boutique(request, boutique_id):
         return Response(serializer.errors, status=400)
 
     transaction = serializer.save(boutique=boutique, effectuee_par=request.user)
-
-    # Mettre à jour le solde opérateur
+    creer_notification(
+        utilisateur=request.user,
+        type_notif='depot' if transaction.type == 'Depot'
+                   else 'retrait' if transaction.type == 'Retrait'
+                   else 'credit',
+        titre=f"Une opération de {transaction.type.lower()} a été effectuée",
+        boutique=boutique,
+    )
+    
+    # Mettre à jour les soldes : Opérateur et Caisse
     try:
-        solde = SoldeOperateur.objects.get(boutique=boutique, operateur=transaction.operateur)
+        # Solde de l'opérateur (MTN, Moov, Celtiis, etc.)
+        solde_operateur = SoldeOperateur.objects.get(boutique=boutique, operateur=transaction.operateur)
+        # Solde de la Caisse
+        solde_caisse = SoldeOperateur.objects.get(boutique=boutique, operateur='Caisse')
+        
         if transaction.type == 'Depot':
-            solde.montant += transaction.montant
-        elif transaction.type in ('Retrait', 'Credit'):
-            solde.montant -= transaction.montant
-        solde.save()
+            # Dépôt : Opérateur diminue (-), Caisse augmente (+)
+            solde_operateur.montant -= transaction.montant
+            solde_caisse.montant += transaction.montant
+        elif transaction.type == 'Retrait':
+            # Retrait : Caisse diminue (-), Opérateur augmente (+)
+            solde_caisse.montant -= transaction.montant
+            solde_operateur.montant += transaction.montant
+        elif transaction.type == 'Credit':
+            # Crédit/Forfait : Opérateur diminue (-), Caisse augmente (+)
+            solde_operateur.montant -= transaction.montant
+            solde_caisse.montant += transaction.montant
+        
+        solde_operateur.save()
+        solde_caisse.save()
     except SoldeOperateur.DoesNotExist:
+        # Créer les soldes s'ils n'existent pas
         pass
 
     return Response(TransactionSerializer(transaction).data, status=201)
@@ -692,18 +737,45 @@ def detail_transaction(request, boutique_id, transaction_id):
         serializer = TransactionSerializer(transaction, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            creer_notification(
+                utilisateur=request.user,
+                type_notif='modification',
+                titre=f"Une modification a été effectuée sur une opération d'achat de crédit / Forfait"
+                    if transaction.type == 'Credit'
+                    else f"Modification d'une opération de {transaction.type.lower()}",
+                boutique=boutique,
+            )
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 
     if request.method == 'DELETE':
-        # Annuler l'impact sur le solde
+        # Annuler l'impact sur les soldes (opérateur et caisse)
         try:
-            solde = SoldeOperateur.objects.get(boutique=boutique, operateur=transaction.operateur)
+            solde_operateur = SoldeOperateur.objects.get(boutique=boutique, operateur=transaction.operateur)
+            solde_caisse = SoldeOperateur.objects.get(boutique=boutique, operateur='Caisse')
+            
             if transaction.type == 'Depot':
-                solde.montant -= transaction.montant
-            elif transaction.type in ('Retrait', 'Credit'):
-                solde.montant += transaction.montant
-            solde.save()
+                # Annuler dépôt : Opérateur augmente (+), Caisse diminue (-)
+                solde_operateur.montant += transaction.montant
+                solde_caisse.montant -= transaction.montant
+            elif transaction.type == 'Retrait':
+                # Annuler retrait : Caisse augmente (+), Opérateur diminue (-)
+                solde_caisse.montant += transaction.montant
+                solde_operateur.montant -= transaction.montant
+            elif transaction.type == 'Credit':
+                # Annuler crédit : Opérateur augmente (+), Caisse diminue (-)
+                solde_operateur.montant += transaction.montant
+                solde_caisse.montant -= transaction.montant
+            
+            solde_operateur.save()
+            solde_caisse.save()
+            
+            creer_notification(
+                utilisateur=request.user,
+                type_notif='suppression',
+                titre=f"Suppression d'une opération de {transaction.type.lower()}",
+                boutique=boutique,
+            )
         except SoldeOperateur.DoesNotExist:
             pass
 
@@ -931,3 +1003,93 @@ def marquer_avis_lu(request, avis_id):
     avis.lu = True
     avis.save()
     return Response(AvisSerializer(avis).data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mes_notifications(request):
+    """
+    GET /notifications/
+    Retourne les notifications de l'utilisateur connecté.
+    Paramètre optionnel : ?non_lues=true  → seulement les non lues
+    """
+    qs = Notification.objects.filter(utilisateur=request.user)
+ 
+    non_lues = request.query_params.get('non_lues')
+    if non_lues and non_lues.lower() == 'true':
+        qs = qs.filter(lu=False)
+ 
+    return Response(NotificationSerializer(qs, many=True).data)
+ 
+ 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def compteur_non_lues(request):
+    """
+    GET /notifications/compteur/
+    Retourne le nombre de notifications non lues.
+    """
+    count = Notification.objects.filter(utilisateur=request.user, lu=False).count()
+    return Response({"non_lues": count})
+ 
+ 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def marquer_notification_lue(request, notif_id):
+    """
+    PATCH /notifications/<notif_id>/lue/
+    Marque une notification comme lue.
+    """
+    try:
+        notif = Notification.objects.get(id=notif_id, utilisateur=request.user)
+    except Notification.DoesNotExist:
+        return Response({"error": "Notification introuvable."}, status=404)
+ 
+    notif.lu = True
+    notif.save()
+    return Response(NotificationSerializer(notif).data)
+ 
+ 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def tout_marquer_lu(request):
+    """
+    PATCH /notifications/tout-marquer-lu/
+    Marque toutes les notifications de l'utilisateur comme lues.
+    Paramètre optionnel : {"date": "2026-06-05"}  → seulement ce jour-là
+    """
+    qs = Notification.objects.filter(utilisateur=request.user, lu=False)
+ 
+    date_param = request.data.get('date')
+    if date_param:
+        qs = qs.filter(cree_le__date=date_param)
+ 
+    count = qs.update(lu=True)
+    return Response({"message": f"{count} notification(s) marquée(s) comme lue(s)."})
+ 
+ 
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def supprimer_notification(request, notif_id):
+    """
+    DELETE /notifications/<notif_id>/
+    Supprime une notification.
+    """
+    try:
+        notif = Notification.objects.get(id=notif_id, utilisateur=request.user)
+    except Notification.DoesNotExist:
+        return Response({"error": "Notification introuvable."}, status=404)
+ 
+    notif.delete()
+    return Response({"message": "Notification supprimée."})
+ 
+ 
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def supprimer_toutes_notifications(request):
+    """
+    DELETE /notifications/tout-supprimer/
+    Supprime toutes les notifications de l'utilisateur.
+    """
+    Notification.objects.filter(utilisateur=request.user).delete()
+    return Response({"message": "Toutes les notifications ont été supprimées."})
+ 

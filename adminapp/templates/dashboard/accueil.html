@@ -14,29 +14,29 @@
 
 <!-- ── KPIs ── -->
 <div class="kpi-grid">
-  <div class="kpi-card" style="--accent-color: #2979FF">
+  <div class="kpi-card" style="--accent-color: #1E88E5">
     <span class="kpi-icon">👥</span>
     <div class="kpi-value">{{ kpis.total_utilisateurs }}</div>
     <div class="kpi-label">Utilisateurs</div>
     <div class="kpi-sub">+{{ kpis.nouveaux_ce_mois }} ce mois</div>
   </div>
-  <div class="kpi-card" style="--accent-color: #22c55e">
+  <div class="kpi-card" style="--accent-color: #43A047">
     <span class="kpi-icon">🏪</span>
     <div class="kpi-value">{{ kpis.total_boutiques }}</div>
     <div class="kpi-label">Boutiques actives</div>
   </div>
-  <div class="kpi-card" style="--accent-color: #f59e0b">
+  <div class="kpi-card" style="--accent-color: #FB8C00">
     <span class="kpi-icon">💸</span>
     <div class="kpi-value">{{ kpis.total_transactions }}</div>
     <div class="kpi-label">Transactions totales</div>
     <div class="kpi-sub">{{ kpis.transactions_auj }} aujourd'hui</div>
   </div>
-  <div class="kpi-card" style="--accent-color: #a855f7">
+  <div class="kpi-card" style="--accent-color: #FDD835">
     <span class="kpi-icon">📦</span>
     <div class="kpi-value">{{ kpis.abonnements_actifs }}</div>
     <div class="kpi-label">Abonnements actifs</div>
   </div>
-  <div class="kpi-card" style="--accent-color: #ef4444">
+  <div class="kpi-card" style="--accent-color: #E53935">
     <span class="kpi-icon">💬</span>
     <div class="kpi-value">{{ kpis.total_avis }}</div>
     <div class="kpi-label">Avis reçus</div>
@@ -213,8 +213,8 @@
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
-Chart.defaults.color = '#8a8fa0';
-Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+Chart.defaults.color = '#7f8c8d';
+Chart.defaults.borderColor = 'rgba(0,0,0,0.08)';
 Chart.defaults.font.family = "'DM Sans', sans-serif";
 
 // ── Transactions 7j ──
@@ -225,8 +225,8 @@ new Chart(document.getElementById('chartTx'), {
     labels: tx7jData.map(d => d.date),
     datasets: [{
       data: tx7jData.map(d => d.count),
-      backgroundColor: 'rgba(41,121,255,0.5)',
-      borderColor: '#2979FF',
+      backgroundColor: 'rgba(30,136,229,0.5)',
+      borderColor: '#1E88E5',
       borderWidth: 1.5,
       borderRadius: 5,
     }]
@@ -250,7 +250,7 @@ if (packsData.length) {
       labels: packsData.map(d => d.pack__nom),
       datasets: [{
         data: packsData.map(d => d.total),
-        backgroundColor: ['#555a6a', '#22c55e', '#f59e0b'],
+        backgroundColor: ['#95a5a6', '#43A047', '#FB8C00'],
         borderWidth: 0,
         hoverOffset: 4,
       }]

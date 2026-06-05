@@ -285,3 +285,40 @@ class Avis(models.Model):
     def __str__(self):
         auteur = self.utilisateur.email if self.utilisateur else "Anonyme"
         return f"Avis de {auteur} — {self.cree_le:%d/%m/%Y}"
+    
+# ══════════════════════════════════════════════════════════════════════
+# NOTIFICATION
+# À ajouter à la fin de models.py
+# ══════════════════════════════════════════════════════════════════════
+
+class Notification(models.Model):
+    TYPE_CHOICES = [
+        ('suppression', 'Suppression'),
+        ('modification', 'Modification'),
+        ('retrait',      'Retrait effectué'),
+        ('depot',        'Dépôt effectué'),
+        ('credit',       'Achat de crédit'),
+        ('export',       'Export PDF'),
+        ('info',         'Information'),
+    ]
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    utilisateur  = models.ForeignKey(
+        Utilisateur, on_delete=models.CASCADE, related_name='notifications'
+    )
+    boutique     = models.ForeignKey(
+        Boutique, on_delete=models.CASCADE, related_name='notifications', null=True, blank=True
+    )
+    type         = models.CharField(max_length=20, choices=TYPE_CHOICES, default='info')
+    titre        = models.CharField(max_length=255)
+    message      = models.TextField(blank=True)
+    lu           = models.BooleanField(default=False)
+    cree_le      = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-cree_le']
+        verbose_name = "Notification"
+        verbose_name_plural = "Notifications"
+
+    def __str__(self):
+        return f"[{self.type}] {self.titre} → {self.utilisateur.email}"

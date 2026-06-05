@@ -57,4 +57,12 @@ urlpatterns = [
     path('avis/',                    views.soumettre_avis,   name='soumettre_avis'),
     path('avis/admin/',              views.liste_avis,        name='liste_avis'),
     path('avis/<uuid:avis_id>/lu/',  views.marquer_avis_lu,  name='marquer_avis_lu'),
+    
+       # Notifications
+    path('notifications/',                              views.mes_notifications,              name='mes_notifications'),
+    path('notifications/compteur/',                     views.compteur_non_lues,              name='compteur_non_lues'),
+    path('notifications/tout-marquer-lu/',              views.tout_marquer_lu,                name='tout_marquer_lu'),
+    path('notifications/tout-supprimer/',               views.supprimer_toutes_notifications, name='supprimer_toutes_notifications'),
+    path('notifications/<uuid:notif_id>/lue/',          views.marquer_notification_lue,       name='marquer_notification_lue'),
+    path('notifications/<uuid:notif_id>/',              views.supprimer_notification,         name='supprimer_notification'),
 ]

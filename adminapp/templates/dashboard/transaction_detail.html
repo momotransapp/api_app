@@ -1,0 +1,262 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Transaction #{{ tx.id }}{% endblock %}
+{% block header_title %}Détail transaction{% endblock %}
+{% block breadcrumb %}Transactions › {{ tx.id }}{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <a href="{% url 'dashboard:transactions' %}" class="btn btn-ghost btn-sm">← Retour</a>
+    <div style="flex:1;min-width:0">
+      <div class="page-heading">Transaction #{{ tx.id|truncatechars:13 }}</div>
+      <div class="page-sub">Créée le {{ tx.date|date:"d/m/Y à H:i:s" }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Type de transaction -->
+<div class="kpi-grid" style="grid-template-columns:1fr;margin-bottom:20px">
+  <div class="kpi-card" style="
+    --accent-color:
+    {% if tx.type == 'Depot' %}#43A047
+    {% elif tx.type == 'Retrait' %}#E53935
+    {% else %}#1E88E5
+    {% endif %}
+  ">
+    <span class="kpi-icon">
+      {% if tx.type == 'Depot' %}💰
+      {% elif tx.type == 'Retrait' %}💸
+      {% else %}📱
+      {% endif %}
+    </span>
+    <div class="kpi-value" style="font-size:24px">{{ tx.montant|floatformat:0 }} XOF</div>
+    <div class="kpi-label">
+      {% if tx.type == 'Depot' %}Dépôt
+      {% elif tx.type == 'Retrait' %}Retrait
+      {% else %}Crédit
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="grid-2" style="margin-bottom:20px">
+
+  <!-- Informations générale -->
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Informations générales</div></div>
+    <div class="panel-body">
+      <table style="width:100%">
+        <tbody>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0;width:120px">ID Transaction</td>
+            <td style="font-size:10px;color:var(--text2);font-family:monospace;word-break:break-all">{{ tx.id }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Boutique</td>
+            <td class="td-main"><a href="{% url 'dashboard:boutique_detail' tx.boutique.id %}" class="link">{{ tx.boutique.nom }}</a></td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Opérateur</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:24px;height:24px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px">
+                  {% if tx.operateur == 'MTN' %}🟡
+                  {% elif tx.operateur == 'Moov' %}🟢
+                  {% elif tx.operateur == 'Celtiis' %}🔵
+                  {% else %}💼
+                  {% endif %}
+                </div>
+                <span>{{ tx.operateur }}</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Type</td>
+            <td>
+              {% if tx.type == 'Depot' %}<span class="badge badge-green">↑ Dépôt</span>
+              {% elif tx.type == 'Retrait' %}<span class="badge badge-red">↓ Retrait</span>
+              {% else %}<span class="badge badge-blue">◈ Crédit</span>
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Montant</td>
+            <td class="td-main" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text)">{{ tx.montant|floatformat:0 }} XOF</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Commission</td>
+            <td style="color:var(--green);font-weight:600">+{{ tx.commission|floatformat:0 }} XOF</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Date</td>
+            <td style="font-size:12px">{{ tx.date|date:"d/m/Y H:i:s" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Informations client -->
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Informations client</div></div>
+    <div class="panel-body">
+      <table style="width:100%">
+        <tbody>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0;width:120px">N° Client</td>
+            <td class="td-main" style="font-family:monospace;font-size:14px;font-weight:600">{{ tx.numero_client }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Nom</td>
+            <td>{{ tx.nom_client|default:"—" }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Référence</td>
+            <td style="font-family:monospace;font-size:12px;color:var(--text2)">{{ tx.reference|default:"—" }}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">Effectuée par</td>
+            <td>
+              {% if tx.effectuee_par %}
+              <a href="{% url 'dashboard:utilisateur_detail' tx.effectuee_par.id %}" class="link">
+                {{ tx.effectuee_par.prenom }} {{ tx.effectuee_par.nom }}
+              </a>
+              {% else %}
+              <span style="color:var(--text3)">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Impact sur les comptes -->
+<div class="panel" style="margin-bottom:20px">
+  <div class="panel-header"><div class="panel-title">Impact sur les comptes</div></div>
+  <div class="panel-body">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+      <!-- Impact Opérateur -->
+      <div style="padding:16px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:12px;letter-spacing:0.5px">
+          Compte Opérateur
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px">
+          {% if tx.type == 'Retrait' %}
+          <span style="font-size:32px;font-weight:700;color:var(--green)">↑</span>
+          <div style="font-size:24px;font-weight:700;color:var(--green)">+{{ tx.montant|floatformat:0 }}</div>
+          {% elif tx.type in 'Depot,Credit' %}
+          <span style="font-size:32px;font-weight:700;color:var(--red)">↓</span>
+          <div style="font-size:24px;font-weight:700;color:var(--red)">-{{ tx.montant|floatformat:0 }}</div>
+          {% endif %}
+          <span style="font-size:14px;color:var(--text3)">XOF</span>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text2);line-height:1.5">
+          {% if tx.type == 'Retrait' %}
+          Argent retiré de la caisse et versé à l'opérateur
+          {% elif tx.type == 'Depot' %}
+          Dépôt reçu du client via l'opérateur, l'opérateur perd l'argent
+          {% else %}
+          Crédit forfaitaire l'opérateur perd l'argent
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Impact Caisse -->
+      <div style="padding:16px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:12px;letter-spacing:0.5px">
+          Compte Caisse
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px">
+          {% if tx.type in 'Depot,Credit' %}
+          <span style="font-size:32px;font-weight:700;color:var(--green)">↑</span>
+          <div style="font-size:24px;font-weight:700;color:var(--green)">+{{ tx.montant|floatformat:0 }}</div>
+          {% elif tx.type == 'Retrait' %}
+          <span style="font-size:32px;font-weight:700;color:var(--red)">↓</span>
+          <div style="font-size:24px;font-weight:700;color:var(--red)">-{{ tx.montant|floatformat:0 }}</div>
+          {% endif %}
+          <span style="font-size:14px;color:var(--text3)">XOF</span>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text2);line-height:1.5">
+          {% if tx.type in 'Depot,Credit' %}
+          Argent collecté en caisse (client payé)
+          {% else %}
+          Argent versé au client depuis la caisse
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Résumé du flux d'argent -->
+<div class="panel">
+  <div class="panel-header"><div class="panel-title">Flux d'argent</div></div>
+  <div class="panel-body">
+    <div style="display:flex;align-items:center;justify-content:center;gap:20px;padding:20px 0">
+      {% if tx.type == 'Depot' %}
+      <div style="text-align:center">
+        <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Client</div>
+        <div style="font-size:28px">💰</div>
+      </div>
+      <div style="font-size:24px;color:var(--text3)">→</div>
+      <div style="text-align:center">
+        <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Opérateur (MTN/Moov)</div>
+        <div style="font-size:28px">
+          {% if tx.operateur == 'MTN' %}🟡
+          {% elif tx.operateur == 'Moov' %}🟢
+          {% elif tx.operateur == 'Celtiis' %}🔵
+          {% endif %}
+        </div>
+      </div>
+      <div style="font-size:24px;color:var(--text3)">→</div>
+      <div style="text-align:center">
+        <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Caisse</div>
+        <div style="font-size:28px">💼</div>
+      </div>
+
+      {% elif tx.type == 'Retrait' %}
+      <div style="text-align:center">
+        <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Caisse</div>
+        <div style="font-size:28px">💼</div>
+      </div>
+      <div style="font-size:24px;color:var(--text3)">→</div>
+      <div style="text-align:center">
+        <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Client</div>
+        <div style="font-size:28px">💰</div>
+      </div>
+      <div style="font-size:24px;color:var(--text3)">→</div>
+      <div style="text-align:center">
+        <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Opérateur</div>
+        <div style="font-size:28px">
+          {% if tx.operateur == 'MTN' %}🟡
+          {% elif tx.operateur == 'Moov' %}🟢
+          {% elif tx.operateur == 'Celtiis' %}🔵
+          {% endif %}
+        </div>
+      </div>
+
+      {% elif tx.type == 'Credit' %}
+      <div style="text-align:center">
+        <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Crédit forfaitaire</div>
+        <div style="font-size:28px">📱</div>
+      </div>
+      <div style="font-size:24px;color:var(--text3)">→</div>
+      <div style="text-align:center">
+        <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Opérateur</div>
+        <div style="font-size:28px">↓</div>
+      </div>
+      <div style="font-size:24px;color:var(--text3)">→</div>
+      <div style="text-align:center">
+        <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Caisse</div>
+        <div style="font-size:28px">↑</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

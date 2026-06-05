@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{% block title %}Admin{% endblock %} — MobileMoney Dashboard</title>
+<title>{% block title %}Admin{% endblock %} — MomoTrans Dashboard</title>
+{% load static %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -11,21 +12,21 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:        #0a0c10;
-  --bg2:       #111318;
-  --bg3:       #181b22;
-  --border:    rgba(255,255,255,0.07);
-  --border2:   rgba(255,255,255,0.12);
-  --text:      #e8eaf0;
-  --text2:     #8a8fa0;
-  --text3:     #555a6a;
-  --accent:    #2979FF;
-  --accent2:   #1a56d4;
-  --green:     #22c55e;
-  --red:       #ef4444;
-  --amber:     #f59e0b;
-  --purple:    #a855f7;
-  --cyan:      #06b6d4;
+  --bg:        #ffffff;
+  --bg2:       #f8f9fa;
+  --bg3:       #f0f2f5;
+  --border:    rgba(0,0,0,0.08);
+  --border2:   rgba(0,0,0,0.12);
+  --text:      #2c3e50;
+  --text2:     #7f8c8d;
+  --text3:     #95a5a6;
+  --accent:    #1E88E5;
+  --accent2:   #1565C0;
+  --green:     #43A047;
+  --red:       #E53935;
+  --amber:     #FB8C00;
+  --purple:    #8E24AA;
+  --cyan:      #0097A7;
   --sidebar-w: 240px;
   --header-h:  60px;
   --radius:    10px;
@@ -65,12 +66,19 @@ body {
 }
 
 .logo-icon {
-  width: 34px; height: 34px;
-  background: var(--accent);
+  width: 40px; height: 40px;
+  background: transparent;
   border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.logo-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .logo-text {
@@ -540,6 +548,424 @@ input[type="date"]:focus { border-color: var(--accent); }
   margin-bottom: 8px;
 }
 
+/* ── RESPONSIVE ────────────────────────────────────────────────────── */
+
+/* Mobile Menu Toggle Button */
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 24px;
+  z-index: 101;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Tablet (768px - 1023px) */
+@media (max-width: 1023px) {
+  :root {
+    --sidebar-w: 200px;
+    --header-h: 56px;
+  }
+
+  .content {
+    padding: 20px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .grid-2 { grid-template-columns: 1fr; gap: 16px; }
+  .grid-3 { grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-auto { grid-template-columns: 1fr; }
+
+  .page-heading {
+    font-size: 20px;
+  }
+
+  .filters {
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    min-width: 150px;
+    max-width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .header {
+    padding: 0 16px;
+  }
+
+  table {
+    font-size: 12px;
+  }
+
+  thead th {
+    font-size: 9.5px;
+    padding: 8px 12px;
+  }
+
+  tbody td {
+    padding: 10px 12px;
+  }
+}
+
+/* Small Tablet / Large Mobile (576px - 767px) */
+@media (max-width: 767px) {
+  :root {
+    --sidebar-w: 0px;
+    --header-h: 56px;
+  }
+
+  body {
+    flex-direction: column;
+  }
+
+  /* Sidebar becomes drawer */
+  .sidebar {
+    position: fixed;
+    left: -100%;
+    top: 0;
+    width: 240px;
+    height: 100vh;
+    z-index: 99;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+    transition: left 0.3s ease;
+  }
+
+  .sidebar.active {
+    left: 0;
+  }
+
+  .main {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .header-title {
+    font-size: 14px;
+  }
+
+  .header-breadcrumb {
+    display: none;
+  }
+
+  .header-date {
+    display: none;
+  }
+
+  .content {
+    padding: 16px;
+  }
+
+  .page-heading {
+    font-size: 18px;
+  }
+
+  .page-top {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .page-top > div:last-child {
+    width: 100%;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .kpi-card {
+    padding: 16px 12px;
+  }
+
+  .kpi-value {
+    font-size: 20px;
+  }
+
+  .kpi-label {
+    font-size: 11px;
+  }
+
+  .grid-2, .grid-3, .grid-auto {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .panel {
+    border-radius: 8px;
+  }
+
+  .panel-header {
+    padding: 12px 16px;
+  }
+
+  .panel-body {
+    padding: 16px;
+  }
+
+  .panel-title {
+    font-size: 13px;
+  }
+
+  .filters {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .search-box {
+    width: 100%;
+    max-width: 100%;
+    min-width: auto;
+  }
+
+  select, .select, input[type="date"], .btn {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .btn {
+    justify-content: center;
+  }
+
+  /* Table Responsive */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  thead th {
+    font-size: 9px;
+    padding: 8px 8px;
+  }
+
+  tbody td {
+    padding: 10px 8px;
+  }
+
+  /* Mobile Menu Button */
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  /* Sidebar Overlay */
+  .sidebar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100vw;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.5);
+    transition: all 0.3s ease;
+    pointer-events: none;
+  }
+
+  .sidebar.active::before {
+    left: 0;
+    pointer-events: all;
+    z-index: -1;
+  }
+
+  .sidebar-logo {
+    padding: 16px 16px 12px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .logo-text {
+    font-size: 14px;
+  }
+
+  .sidebar-nav {
+    padding: 12px 8px;
+  }
+
+  .nav-item {
+    padding: 8px 8px;
+    font-size: 13px;
+  }
+
+  /* Forms Responsive */
+  .search-box {
+    min-width: auto;
+  }
+
+  .search-box input {
+    padding: 8px 0;
+  }
+
+  select, input[type="date"] {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .btn-sm {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+}
+
+/* Small Mobile (320px - 575px) */
+@media (max-width: 575px) {
+  :root {
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+
+  .page-heading {
+    font-size: 16px;
+  }
+
+  .content {
+    padding: 12px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .kpi-card {
+    padding: 14px 10px;
+  }
+
+  .kpi-value {
+    font-size: 18px;
+  }
+
+  .kpi-icon {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .panel-action {
+    width: 100%;
+    text-align: right;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+
+  select, input[type="date"], .btn, .search-box {
+    font-size: 14px;
+    width: 100%;
+  }
+
+  .btn {
+    width: 100%;
+  }
+
+  table {
+    font-size: 10px;
+  }
+
+  thead th {
+    font-size: 8px;
+    padding: 6px 6px;
+  }
+
+  tbody td {
+    padding: 8px 6px;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  .user-name {
+    font-size: 12px;
+  }
+
+  .user-role {
+    font-size: 9px;
+  }
+
+  .header {
+    height: 52px;
+    padding: 0 8px;
+  }
+
+  .header-title {
+    font-size: 13px;
+  }
+
+  .nav-item {
+    font-size: 12px;
+    padding: 7px 8px;
+  }
+
+  .nav-label {
+    font-size: 9px;
+  }
+
+  .messages-list {
+    margin-bottom: 12px;
+  }
+
+  .msg {
+    padding: 8px 12px;
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  .empty {
+    padding: 32px 12px;
+    font-size: 12px;
+  }
+
+  .mobile-menu-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+    bottom: 16px;
+    right: 16px;
+  }
+}
+
 .msg-success { background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
 .msg-error   { background: rgba(239,68,68,0.1);  color: var(--red);   border: 1px solid rgba(239,68,68,0.2); }
 
@@ -555,11 +981,8 @@ input[type="date"]:focus { border-color: var(--accent); }
 <aside class="sidebar">
   <div class="sidebar-logo">
     <a href="{% url 'dashboard:accueil' %}" class="logo-mark">
-      <div class="logo-icon">💱</div>
-      <div>
-        <div class="logo-text">MobileMoney</div>
-        <div class="logo-sub">Admin Panel</div>
-      </div>
+      <div class="logo-icon"><img src="{% static 'logo.png' %}" alt="MomoTrans"></div>
+     
     </a>
   </div>
 
@@ -651,6 +1074,9 @@ input[type="date"]:focus { border-color: var(--accent); }
 
 </main>
 
+<!-- Mobile Menu Toggle -->
+<button class="mobile-menu-btn" id="mobile-menu-toggle" aria-label="Toggle menu">☰</button>
+
 <script>
 // Live clock
 function updateClock() {
@@ -662,6 +1088,40 @@ function updateClock() {
 }
 updateClock();
 setInterval(updateClock, 60000);
+
+// Mobile Menu Toggle
+const mobileMenuBtn = document.getElementById('mobile-menu-toggle');
+const sidebar = document.querySelector('.sidebar');
+
+if (mobileMenuBtn) {
+  mobileMenuBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('active');
+  });
+
+  // Close sidebar when clicking a nav item
+  const navItems = document.querySelectorAll('.nav-item');
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      sidebar.classList.remove('active');
+    });
+  });
+
+  // Close sidebar when clicking outside on mobile
+  document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 767) {
+      if (!sidebar.contains(e.target) && !mobileMenuBtn.contains(e.target)) {
+        sidebar.classList.remove('active');
+      }
+    }
+  });
+
+  // Close sidebar on window resize to desktop
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 767) {
+      sidebar.classList.remove('active');
+    }
+  });
+}
 </script>
 
 {% block extra_js %}{% endblock %}

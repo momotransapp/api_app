@@ -6,43 +6,56 @@
 {% block content %}
 
 <div class="page-top">
-  <div style="display:flex;align-items:center;gap:16px">
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
     <a href="{% url 'dashboard:boutiques' %}" class="btn btn-ghost btn-sm">← Retour</a>
-    <div>
+    <div style="flex:1;min-width:0">
       <div class="page-heading">{{ boutique.nom }}</div>
       <div class="page-sub">Propriétaire : {{ boutique.proprietaire.prenom }} {{ boutique.proprietaire.nom }}</div>
     </div>
   </div>
-  <form method="post">
+  <form method="post" style="width:100%">
     {% csrf_token %}
     <input type="hidden" name="action" value="toggle_active">
-    <button type="submit" class="btn {% if boutique.active %}btn-danger{% else %}btn-success{% endif %} btn-sm">
+    <button type="submit" class="btn {% if boutique.active %}btn-danger{% else %}btn-success{% endif %} btn-sm" style="width:100%">
       {% if boutique.active %}Désactiver{% else %}Réactiver{% endif %}
     </button>
   </form>
 </div>
 
 <!-- KPIs boutique -->
-<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
-  <div class="kpi-card" style="--accent-color:#22c55e">
-    <span class="kpi-icon">💰</span>
-    <div class="kpi-value" style="font-size:18px">{{ stats.total_depots|default:0|floatformat:0 }}</div>
-    <div class="kpi-label">Total dépôts (XOF)</div>
+<div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:24px">
+  <!-- Section Opérateur -->
+  <div>
+    <div class="kpi-label" style="color:var(--text3);font-size:12px;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Compte Opérateur</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">
+      <div class="kpi-card" style="--accent-color:#43A047">
+        <span class="kpi-icon">📥</span>
+        <div class="kpi-value" style="font-size:16px">{{ stats.total_depots|default:0|floatformat:0 }}</div>
+        <div class="kpi-label">Dépôts reçus (XOF)</div>
+      </div>
+      <div class="kpi-card" style="--accent-color:#E53935">
+        <span class="kpi-icon">📤</span>
+        <div class="kpi-value" style="font-size:16px">{{ stats.total_retraits|default:0|floatformat:0 }}</div>
+        <div class="kpi-label">Retraits versés (XOF)</div>
+      </div>
+    </div>
   </div>
-  <div class="kpi-card" style="--accent-color:#ef4444">
-    <span class="kpi-icon">💸</span>
-    <div class="kpi-value" style="font-size:18px">{{ stats.total_retraits|default:0|floatformat:0 }}</div>
-    <div class="kpi-label">Total retraits (XOF)</div>
-  </div>
-  <div class="kpi-card" style="--accent-color:#2979FF">
-    <span class="kpi-icon">📱</span>
-    <div class="kpi-value" style="font-size:18px">{{ stats.total_credits|default:0|floatformat:0 }}</div>
-    <div class="kpi-label">Total crédits (XOF)</div>
-  </div>
-  <div class="kpi-card" style="--accent-color:#a855f7">
-    <span class="kpi-icon">⭐</span>
-    <div class="kpi-value" style="font-size:18px">{{ stats.total_commissions|default:0|floatformat:0 }}</div>
-    <div class="kpi-label">Commissions (XOF)</div>
+
+  <!-- Section Caisse -->
+  <div>
+    <div class="kpi-label" style="color:var(--text3);font-size:12px;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Compte Caisse</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">
+      <div class="kpi-card" style="--accent-color:#1E88E5">
+        <span class="kpi-icon">💳</span>
+        <div class="kpi-value" style="font-size:16px">{{ stats.total_depots|add:stats.total_credits|default:0|floatformat:0 }}</div>
+        <div class="kpi-label">Reçu en caisse (XOF)</div>
+      </div>
+      <div class="kpi-card" style="--accent-color:#FB8C00">
+        <span class="kpi-icon">⭐</span>
+        <div class="kpi-value" style="font-size:16px">{{ stats.total_commissions|default:0|floatformat:0 }}</div>
+        <div class="kpi-label">Commissions (XOF)</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -93,6 +106,11 @@
   <div class="panel">
     <div class="panel-header"><div class="panel-title">Soldes par opérateur</div></div>
     <div class="panel-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.5">
+        Le système de soldes fonctionne avec <strong>2 comptes</strong> :<br>
+        • <strong>Compte Opérateur</strong> : argent disponible auprès de l'opérateur<br>
+        • <strong>Compte Caisse</strong> : argent en caisse (collecté des clients)
+      </div>
       {% for s in soldes %}
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
         <div style="display:flex;align-items:center;gap:10px">
@@ -161,11 +179,11 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Type</th><th>Opérateur</th><th>Montant</th><th>Commission</th><th>Client</th><th>Par</th><th>Date</th></tr>
+        <tr><th>Type</th><th>Opérateur</th><th>Montant</th><th style="text-align:center">Impact Opérateur</th><th style="text-align:center">Impact Caisse</th><th>Client</th><th>Par</th><th>Date</th></tr>
       </thead>
       <tbody>
         {% for tx in transactions %}
-        <tr>
+        <tr style="cursor:pointer" onclick="window.location='{% url 'dashboard:transaction_detail' tx.id %}'">
           <td>
             {% if tx.type == 'Depot' %}<span class="badge badge-green">↑ Dépôt</span>
             {% elif tx.type == 'Retrait' %}<span class="badge badge-red">↓ Retrait</span>
@@ -173,7 +191,22 @@
           </td>
           <td><span class="badge badge-gray">{{ tx.operateur }}</span></td>
           <td class="td-main">{{ tx.montant|floatformat:0 }} XOF</td>
-          <td style="color:var(--green)">+{{ tx.commission|floatformat:0 }}</td>
+          <!-- Impact Opérateur -->
+          <td style="text-align:center">
+            {% if tx.type == 'Retrait' %}
+            <span style="color:var(--green);font-weight:600">↑ +{{ tx.montant|floatformat:0 }}</span>
+            {% elif tx.type in 'Depot,Credit' %}
+            <span style="color:var(--red);font-weight:600">↓ -{{ tx.montant|floatformat:0 }}</span>
+            {% endif %}
+          </td>
+          <!-- Impact Caisse -->
+          <td style="text-align:center">
+            {% if tx.type in 'Depot,Credit' %}
+            <span style="color:var(--green);font-weight:600">↑ +{{ tx.montant|floatformat:0 }}</span>
+            {% elif tx.type == 'Retrait' %}
+            <span style="color:var(--red);font-weight:600">↓ -{{ tx.montant|floatformat:0 }}</span>
+            {% endif %}
+          </td>
           <td style="font-size:12px">{{ tx.nom_client|default:tx.numero_client }}</td>
           <td style="font-size:12px;color:var(--text2)">
             {% if tx.effectuee_par %}{{ tx.effectuee_par.prenom }}{% else %}—{% endif %}
@@ -181,7 +214,7 @@
           <td style="font-size:12px;color:var(--text3)">{{ tx.date|date:"d/m/Y H:i" }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="empty">Aucune transaction</td></tr>
+        <tr><td colspan="8" class="empty">Aucune transaction</td></tr>
         {% endfor %}
       </tbody>
     </table>

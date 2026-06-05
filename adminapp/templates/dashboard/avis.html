@@ -30,12 +30,12 @@
 {% if avis_list %}
 <div style="display:flex;flex-direction:column;gap:12px">
   {% for a in avis_list %}
-  <div class="panel" style="{% if not a.lu %}border-color:rgba(41,121,255,0.3);{% endif %}">
+  <div class="panel" style="{% if not a.lu %}border-color:rgba(30,136,229,0.3);{% endif %}">
     <div style="padding:18px 20px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:12px">
           {% if a.utilisateur %}
-          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#2979FF,#a855f7);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#1E88E5,#43A047);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">
             {{ a.utilisateur.prenom.0 }}{{ a.utilisateur.nom.0 }}
           </div>
           <div>

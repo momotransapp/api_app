@@ -287,6 +287,34 @@ def transactions_view(request):
     })
 
 
+@staff_required
+def transaction_detail(request, tx_id):
+    """Affiche le détail complet d'une transaction"""
+    tx = get_object_or_404(Transaction, id=tx_id)
+    
+    # Calculer l'impact sur les comptes
+    if tx.type == 'Retrait':
+        impact_operateur = f"+{tx.montant}"
+        impact_caisse = f"-{tx.montant}"
+    else:  # Depot ou Credit
+        impact_operateur = f"-{tx.montant}"
+        impact_caisse = f"+{tx.montant}"
+    
+    # Récupérer les transactions précédentes pour montrer le solde avant/après
+    tx_avant = Transaction.objects.filter(
+        boutique=tx.boutique,
+        operateur=tx.operateur,
+        date__lt=tx.date
+    ).order_by('-date').first()
+    
+    return render(request, 'dashboard/transaction_detail.html', {
+        'page': 'transactions',
+        'tx': tx,
+        'impact_operateur': impact_operateur,
+        'impact_caisse': impact_caisse,
+    })
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  ABONNEMENTS
 # ══════════════════════════════════════════════════════════════════════════

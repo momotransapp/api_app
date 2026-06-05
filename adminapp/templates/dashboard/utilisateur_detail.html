@@ -5,15 +5,15 @@
 
 {% block content %}
 
-<div class="page-top">
-  <div style="display:flex;align-items:center;gap:16px">
+<div class="page-top" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px">
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
     <a href="{% url 'dashboard:utilisateurs' %}" class="btn btn-ghost btn-sm">← Retour</a>
     <div>
       <div class="page-heading">{{ u.prenom }} {{ u.nom }}</div>
       <div class="page-sub">{{ u.email }}</div>
     </div>
   </div>
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
     <form method="post" style="display:inline">
       {% csrf_token %}
       <input type="hidden" name="action" value="toggle_active">
