@@ -57,13 +57,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
-        # Pour PostgreSQL en production :
-        # 'ENGINE': 'django.db.backends.postgresql',
-        # 'NAME': 'momotrans',
-        # 'USER': 'postgres',
-        # 'PASSWORD': 'your_password',
-        # 'HOST': 'localhost',
-        # 'PORT': '5432',
+    
     }
 }
 
@@ -91,13 +85,7 @@ CORS_ALLOW_ALL_ORIGINS = True  # Restreindre en production
 
 # ── Email (configurer pour l'envoi réel) ──────────────────────────────────
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-# En production :
-# EMAIL_BACKEND    = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST       = 'smtp.gmail.com'
-# EMAIL_PORT       = 587
-# EMAIL_USE_TLS    = True
-# EMAIL_HOST_USER  = 'your@email.com'
-# EMAIL_HOST_PASSWORD = 'your_password'
+
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LANGUAGE_CODE = 'fr-fr'
