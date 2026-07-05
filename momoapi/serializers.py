@@ -63,7 +63,7 @@ class RechercheUtilisateurSerializer(serializers.ModelSerializer):
     """Utilisé pour la recherche lors de l'ajout d'un membre boutique."""
     class Meta:
         model  = Utilisateur
-        fields = ['id', 'email', 'nom', 'prenom']
+        fields = ['id', 'email', 'telephone', 'nom', 'prenom']
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -127,8 +127,23 @@ class MembreBoutiqueSerializer(serializers.ModelSerializer):
 
 
 class AjouterMembreSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=False)
+    telephone = serializers.CharField(required=False, allow_blank=True)
+    identifiant = serializers.CharField(required=False, allow_blank=True)
     role  = serializers.ChoiceField(choices=['gerant', 'admin'])
+
+    def validate(self, data):
+        contact = (
+            data.get('identifiant')
+            or data.get('email')
+            or data.get('telephone')
+        )
+        if not contact:
+            raise serializers.ValidationError({
+                'identifiant': "Veuillez fournir un email ou un numéro de téléphone."
+            })
+        data['contact'] = contact.strip()
+        return data
 
 
 # ══════════════════════════════════════════════════════════════════════

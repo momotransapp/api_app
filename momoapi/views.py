@@ -274,14 +274,22 @@ def profil(request):
 @permission_classes([AllowAny])
 def rechercher_utilisateur(request):
     """
-    POST /auth/rechercher/  {"email": "..."}
+    POST /auth/rechercher/  {"email": "..."} ou {"telephone": "..."} ou {"contact": "..."}
     Utilisé pour chercher un utilisateur avant de l'ajouter à une boutique.
     """
     email = request.data.get('email', '').strip()
-    if not email:
-        return Response({"error": "Email requis."}, status=400)
+    telephone = request.data.get('telephone', '').strip()
+    contact = request.data.get('contact', '').strip()
+
+    value = email or telephone or contact
+    if not value:
+        return Response({"error": "Email ou numéro de téléphone requis."}, status=400)
+
     try:
-        utilisateur = Utilisateur.objects.get(email=email)
+        if email or ('@' in value):
+            utilisateur = Utilisateur.objects.get(email=value)
+        else:
+            utilisateur = Utilisateur.objects.get(telephone=value)
         return Response(RechercheUtilisateurSerializer(utilisateur).data)
     except Utilisateur.DoesNotExist:
         return Response({"found": False, "message": "Aucun compte trouvé."}, status=404)
@@ -529,10 +537,15 @@ def membres_boutique(request, boutique_id):
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
+    contact = serializer.validated_data.get('contact')
+
     try:
-        nouveau = Utilisateur.objects.get(email=serializer.validated_data['email'])
+        if '@' in contact:
+            nouveau = Utilisateur.objects.get(email=contact)
+        else:
+            nouveau = Utilisateur.objects.get(telephone=contact)
     except Utilisateur.DoesNotExist:
-        return Response({"error": "Aucun compte trouvé pour cet email."}, status=404)
+        return Response({"error": "Aucun compte trouvé pour ce contact."}, status=404)
 
     if MembreBoutique.objects.filter(boutique=boutique, utilisateur=nouveau).exists():
         return Response({"error": "Cet utilisateur est déjà membre de la boutique."}, status=409)
