@@ -16,9 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path,include
+from adminapp.views import home
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('momoapi.urls')),
-    path("",include('adminapp.urls'))
+    path('', home, name='home'),
+    path('dashboard/', include('adminapp.urls')),
 ]

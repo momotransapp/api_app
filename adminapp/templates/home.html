@@ -1,0 +1,1063 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MomoTrans — Gérez vos transactions Mobile Money sans stress</title>
+  <meta name="description" content="MomoTrans est l'application mobile qui transforme votre cabine Mobile Money en business moderne. MTN, Moov, Celtiis — tout en un seul endroit." />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts : Plus Jakarta Sans (moderne, arrondi, distinctif) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap" rel="stylesheet" />
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+  <!-- Font Awesome (icônes de marque) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#EEF4FF',
+              100: '#DCE7FF',
+              200: '#B9CFFF',
+              300: '#8DB1FF',
+              400: '#5C8DFF',
+              500: '#2D6FF7',
+              600: '#1E5FE6',
+              700: '#1A4FBF',
+              800: '#1B4399',
+              900: '#1C3A7A'
+            },
+            ink: {
+              900: '#0F1115',
+              700: '#2A2E37',
+              500: '#5B6271',
+              300: '#A0A7B5'
+            },
+            cream: '#F4F6FA'
+          },
+          fontFamily: {
+            sans: ['"Ubuntu"', 'system-ui', 'sans-serif']
+          },
+          boxShadow: {
+            soft: '0 10px 40px -10px rgba(45, 111, 247, 0.18)',
+            card: '0 4px 24px -6px rgba(15, 17, 21, 0.08)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Ubuntu', sans-serif; background: #F4F6FA; color: #0F1115; }
+
+    /* Background décoratif du hero — gradient bleu doux */
+    .hero-bg {
+      background:
+        radial-gradient(60% 80% at 80% 20%, #E0EBFF 0%, transparent 70%),
+        linear-gradient(180deg, #F4F6FA 0%, #FFFFFF 100%);
+    }
+
+    /* Bulle bleue derrière les téléphones */
+    .blob-blue {
+      position: absolute;
+      background: #2D6FF7;
+      border-radius: 50%;
+      filter: blur(0px);
+    }
+
+    /* Animation d'apparition au scroll */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1);
+    }
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Float subtil des téléphones */
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    .float-anim { animation: float 6s ease-in-out infinite; }
+    .float-anim-delay { animation: float 6s ease-in-out infinite; animation-delay: -3s; }
+
+    /* Effet hover sur les boutons */
+    .btn-primary {
+      transition: all .25s ease;
+      box-shadow: 0 8px 24px -8px rgba(45, 111, 247, 0.5);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px -8px rgba(45, 111, 247, 0.7);
+    }
+
+    /* Étiquette pricing populaire */
+    .popular-badge {
+      background: linear-gradient(135deg, #2D6FF7 0%, #5C8DFF 100%);
+    }
+
+    /* Carte FAQ */
+    details summary { list-style: none; cursor: pointer; }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] .faq-icon { transform: rotate(45deg); }
+    .faq-icon { transition: transform .2s ease; }
+
+    /* Phone mockup — base */
+    .phone-frame {
+      background: #0F1115;
+      border-radius: 36px;
+      padding: 8px;
+      box-shadow: 0 24px 48px -16px rgba(15, 17, 21, 0.35), 0 0 0 1px rgba(255,255,255,0.05) inset;
+    }
+    .phone-screen {
+      background: #FFFFFF;
+      border-radius: 28px;
+      overflow: hidden;
+      position: relative;
+    }
+    .phone-notch {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90px;
+      height: 22px;
+      background: #0F1115;
+      border-radius: 12px;
+      z-index: 10;
+    }
+
+    /* Logo spirale colorée */
+    .logo-spin {
+      background: conic-gradient(from 0deg at 50% 50%, #FFD93D, #FF6B35, #2D6FF7, #6BCB77, #FFD93D);
+      border-radius: 50%;
+      position: relative;
+    }
+    .logo-spin::after {
+      content: '';
+      position: absolute;
+      inset: 6px;
+      background: #F4F6FA;
+      border-radius: 50%;
+    }
+
+    /* Mobile menu */
+    .mobile-menu { display: none; }
+    .mobile-menu.open { display: block; }
+
+    /* Subtle grain background pour ajouter de la texture */
+    .grain {
+      position: relative;
+    }
+    .grain::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+  </style>
+</head>
+<body class="antialiased">
+
+  <!-- =============================== NAVBAR =============================== -->
+  <header class="sticky top-0 z-50 bg-cream/80 backdrop-blur-lg border-b border-black/5">
+    <nav class="max-w-7xl mx-auto px-6 lg:px-10 py-4 flex items-center justify-between">
+      <!-- Logo -->
+      <a href="#">
+        <img src="{% static 'logo MomoTrans.png' %}" alt="MomoTrans" class="h-12">
+      </a>
+
+      <!-- Menu desktop -->
+      <ul class="hidden lg:flex items-center gap-9 text-sm font-medium text-ink-700">
+        <li><a href="#fonctionnalites" class="hover:text-brand-500 transition">Fonctionnalités</a></li>
+        <li><a href="#pourquoi" class="hover:text-brand-500 transition">Pourquoi MomoTrans</a></li>
+        <li><a href="#tarifs" class="hover:text-brand-500 transition">Tarifs</a></li>
+        <li><a href="#avis" class="hover:text-brand-500 transition">Avis</a></li>
+        <li><a href="#faq" class="hover:text-brand-500 transition">FAQ</a></li>
+      </ul>
+
+      <!-- CTA -->
+      <a href="#telecharger" class="btn-primary hidden md:inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold px-5 py-3 rounded-full">
+        Télécharger l'application
+        <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+      </a>
+
+      <!-- Bouton menu mobile -->
+      <button id="mobileMenuBtn" class="lg:hidden p-2" aria-label="Menu">
+        <i data-lucide="menu" class="w-6 h-6"></i>
+      </button>
+    </nav>
+
+    <!-- Menu mobile -->
+    <div id="mobileMenu" class="mobile-menu lg:hidden bg-white border-t border-black/5 px-6 py-4">
+      <ul class="space-y-3 text-sm font-medium text-ink-700">
+        <li><a href="#fonctionnalites" class="block py-2">Fonctionnalités</a></li>
+        <li><a href="#pourquoi" class="block py-2">Pourquoi MomoTrans</a></li>
+        <li><a href="#tarifs" class="block py-2">Tarifs</a></li>
+        <li><a href="#avis" class="block py-2">Avis</a></li>
+        <li><a href="#faq" class="block py-2">FAQ</a></li>
+        <li class="pt-2">
+          <a href="#telecharger" class="btn-primary inline-flex items-center gap-2 bg-brand-500 text-white text-sm font-semibold px-5 py-3 rounded-full">
+            Télécharger
+            <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </header>
+
+  <!-- =============================== HERO =============================== -->
+  <section class="hero-bg relative overflow-hidden">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10 pt-12 lg:pt-20 pb-24 lg:pb-32">
+      <div class="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+
+        <!-- Colonne gauche -->
+        <div class="reveal">
+          <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-[1.05] tracking-tight text-ink-900">
+            Gérez votre cabine
+            <span class="text-brand-500"> Mobile Money</span>
+            comme un vrai professionnel.
+          </h1>
+
+          <p class="mt-5 text-lg font-semibold text-ink-700 max-w-lg leading-snug">
+            Fini le cahier. Fini les pertes. Fini les calculs interminables.
+          </p>
+
+          <p class="mt-2 text-base text-ink-500 max-w-lg leading-relaxed">
+            MomoTrans est l'application mobile qui transforme votre cabine Mobile Money en business moderne, rentable et sécurisé.
+          </p>
+
+          <!-- Badges opérateurs -->
+          <div class="mt-6 flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 bg-yellow-100 text-yellow-800 text-base font-semibold px-3 py-1.5 rounded-full">
+              <span class="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block"></span>MTN
+            </span>
+            <span class="inline-flex items-center gap-1.5 bg-blue-100 text-blue-800 text-base font-semibold px-3 py-1.5 rounded-full">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>Moov
+            </span>
+            <span class="inline-flex items-center gap-1.5 bg-green-100 text-green-800 text-base font-semibold px-3 py-1.5 rounded-full">
+              <span class="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span>Celtiis
+            </span>
+            <span class="text-base text-ink-500">— tout en un seul endroit.</span>
+          </div>
+
+          <!-- CTA buttons -->
+          <div class="mt-8 flex flex-wrap gap-3">
+            <a href="#telecharger" class="btn-primary inline-flex items-center gap-2 bg-brand-500 text-white text-base font-semibold px-5 py-3 rounded-full">
+              Télécharger l'application
+              <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+            </a>
+            <a href="#demo" class="inline-flex items-center gap-2 border-2 border-brand-500 text-brand-500 hover:bg-brand-50 text-base font-semibold px-6 py-3.5 rounded-full transition">
+              ▶  Voir la démo
+            </a>
+          </div>
+
+          <!-- Ligne de réassurance -->
+          <p class="mt-5 text-base text-ink-500">
+             2 mois gratuits &nbsp;•&nbsp; Sans engagement &nbsp;•&nbsp; Fonctionne hors ligne
+          </p>
+        </div>
+
+        <!-- Colonne droite — Mockups téléphones -->
+        <div class="relative reveal flex flex-col items-end">
+          <!-- Bandeau social proof -->
+          <div id="social-proof" class="inline-flex items-center gap-3 mb-4 relative" style="top: -20px;">
+            <!-- Avatars extraits de Group 4.png -->
+            <div class="overflow-hidden flex-shrink-0" style="width: 135px; height: 65px;">
+              <img src="{% static 'Group 4.png' %}" alt="avatars utilisateurs" style="width: 301px; height: 65px; object-fit: none; object-position: left center;">
+            </div>
+            <div>
+              <p class="font-bold text-ink-900 text-lg leading-tight">
+                +<span id="counter-users">0</span> Millions
+              </p>
+              <p class="text-sm text-ink-500">utilisateurs heureux</p>
+            </div>
+          </div>
+
+          <!-- Visuel app -->
+          <img
+            src="{% static 'Group 22.png' %}"
+            alt="Aperçu de l'application MomoTrans — Rapports, Dashboard et Historique"
+            class="w-full h-auto object-contain drop-shadow-2xl"
+          />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================== SECTION PROBLÈME =============================== -->
+  <section class="py-24 lg:py-32 bg-white">
+    <div class="max-w-6xl mx-auto px-6 lg:px-10">
+      <div class="text-center reveal">
+        <span class="inline-block px-4 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-full mb-4 tracking-wider uppercase">Le quotidien des gérants</span>
+        <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-ink-900">
+          Vous gérez une cabine Mobile Money ?
+        </h2>
+        <p class="mt-3 text-xl text-ink-500">Alors vous vivez sûrement ça tous les jours...</p>
+      </div>
+
+      <div class="mt-16 grid md:grid-cols-2 lg:grid-cols-3 gap-5 reveal">
+        <!-- Problème 1 -->
+        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
+          <div class="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center mb-5">
+            <i data-lucide="trending-down" class="w-6 h-6 text-red-600"></i>
+          </div>
+          <h3 class="font-bold text-lg text-ink-900 mb-2">Vous perdez de l'argent</h3>
+          <p class="text-ink-500 text-sm leading-relaxed">Vous finissez la journée sans savoir combien vous avez vraiment gagné. Les commissions sont calculées à la main, avec des erreurs.</p>
+        </div>
+
+        <!-- Problème 2 -->
+        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
+          <div class="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center mb-5">
+            <i data-lucide="alert-triangle" class="w-6 h-6 text-orange-600"></i>
+          </div>
+          <h3 class="font-bold text-lg text-ink-900 mb-2">Des disputes constantes</h3>
+          <p class="text-ink-500 text-sm leading-relaxed">Un client conteste une opération et vous n'avez aucune preuve à lui montrer. Vous perdez de l'argent, et la face devant les clients.</p>
+        </div>
+
+        <!-- Problème 3 -->
+        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
+          <div class="w-12 h-12 rounded-xl bg-yellow-100 flex items-center justify-center mb-5">
+            <i data-lucide="book-x" class="w-6 h-6 text-yellow-700"></i>
+          </div>
+          <h3 class="font-bold text-lg text-ink-900 mb-2">Cahiers perdus ou abîmés</h3>
+          <p class="text-ink-500 text-sm leading-relaxed">Votre cahier est mouillé, déchiré, ou introuvable au moment où vous en avez besoin. Et avec lui, des semaines de données disparaissent.</p>
+        </div>
+
+        <!-- Problème 4 -->
+        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
+          <div class="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center mb-5">
+            <i data-lucide="user-x" class="w-6 h-6 text-purple-600"></i>
+          </div>
+          <h3 class="font-bold text-lg text-ink-900 mb-2">Vos agents sans contrôle</h3>
+          <p class="text-ink-500 text-sm leading-relaxed">Votre agent fait des erreurs — ou pire, triche — et vous ne le voyez pas. Vous ne pouvez pas tout surveiller en même temps.</p>
+        </div>
+
+        <!-- Problème 5 -->
+        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
+          <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-5">
+            <i data-lucide="clock" class="w-6 h-6 text-blue-600"></i>
+          </div>
+          <h3 class="font-bold text-lg text-ink-900 mb-2">Des heures perdues le soir</h3>
+          <p class="text-ink-500 text-sm leading-relaxed">Vous passez 2 heures chaque soir à recompter vos transactions au lieu de profiter de votre famille ou de vous reposer.</p>
+        </div>
+
+        <!-- Problème 6 -->
+        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
+          <div class="w-12 h-12 rounded-xl bg-teal-100 flex items-center justify-center mb-5">
+            <i data-lucide="zap-off" class="w-6 h-6 text-teal-600"></i>
+          </div>
+          <h3 class="font-bold text-lg text-ink-900 mb-2">Soldes à zéro sans alerte</h3>
+          <p class="text-ink-500 text-sm leading-relaxed">Vous voyez votre solde MTN à zéro alors qu'un client attend depuis 10 minutes. Vous perdez la vente — et le client.</p>
+        </div>
+      </div>
+
+      <p class="text-center mt-12 text-xl font-bold text-ink-900 reveal">
+        Vous méritez mieux que ça.
+      </p>
+    </div>
+  </section>
+
+  <!-- =============================== SECTION SOLUTION =============================== -->
+  <section class="py-24 lg:py-32 bg-cream relative overflow-hidden">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+
+        <!-- Visuel -->
+        <div class="relative reveal flex items-center justify-center">
+          <!-- Cercle bleu décoratif -->
+          <div class="absolute w-80 h-80 lg:w-[420px] lg:h-[420px] bg-[#1E90FF] rounded-full z-0"></div>
+          <!-- Image flottante -->
+          <img
+            src="{% static 'Groupe 2 copie.png' %}"
+            alt="Mockup application MomoTrans"
+            class="relative z-10 w-full max-w-md h-auto object-contain drop-shadow-2xl float-anim"
+          />
+        </div>
+
+        <!-- Texte -->
+        <div class="reveal">
+          <span class="inline-block px-4 py-1.5 bg-brand-50 text-brand-600 text-xs font-semibold rounded-full mb-4 tracking-wider uppercase">La solution</span>
+          <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-ink-900 leading-tight">
+            MomoTrans, c'est votre nouveau cahier, mais en mille fois plus puissant.
+          </h2>
+          <p class="mt-6 text-lg text-ink-500 leading-relaxed">
+            Une application mobile pensée pour les gérants de cabines Mobile Money du Bénin. Simple, rapide, sécurisée. Et faite par des gens qui connaissent votre réalité.
+          </p>
+
+          <ul class="mt-8 space-y-4">
+            <li class="flex items-start gap-3">
+              <span class="w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>
+              </span>
+              <p class="text-ink-700"><span class="font-semibold">MTN, Moov et Celtiis</span> intégrés nativement</p>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>
+              </span>
+              <p class="text-ink-700"><span class="font-semibold">Mode hors ligne</span> — fonctionne même sans Internet</p>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>
+              </span>
+              <p class="text-ink-700"><span class="font-semibold">Données sécurisées</span> et sauvegardées dans le cloud</p>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>
+              </span>
+              <p class="text-ink-700"><span class="font-semibold">Pensée pour le Bénin</span>, par des Béninois</p>
+            </li>
+          </ul>
+
+          <a href="#telecharger" class="mt-10 inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white font-semibold px-6 py-3.5 rounded-full btn-primary">
+            Essayer gratuitement
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================== SECTION POURQUOI =============================== -->
+  <section id="pourquoi" class="py-24 lg:py-32 bg-white">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="grid lg:grid-cols-2 gap-12 lg:gap-20 items-start">
+
+        <!-- Colonne gauche -->
+        <div class="reveal lg:sticky lg:top-28">
+          <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-ink-900 leading-tight">
+            Pourquoi utiliser <span class="text-brand-500">MomoTrans</span> ?
+          </h2>
+          <p class="mt-6 text-lg text-ink-500 leading-relaxed">
+            Parce que vous méritez de travailler intelligemment. Voici les vraies raisons qui font la différence au quotidien.
+          </p>
+
+          <!-- Stats -->
+          <div id="stats-section" class="mt-10 grid grid-cols-2 gap-8">
+            <div>
+              <p class="text-3xl lg:text-4xl font-extrabold text-brand-500">
+                +<span id="stat-downloads">0</span> Millions
+              </p>
+              <p class="text-sm text-ink-500 mt-1">téléchargements effectués</p>
+            </div>
+            <div>
+              <p class="text-3xl lg:text-4xl font-extrabold text-brand-500">
+                <span id="stat-rating">0</span>
+              </p>
+              <p class="text-sm text-ink-500 mt-1">évaluations sur 5</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Colonne droite : 6 raisons -->
+        <div class="space-y-5">
+          <!-- Raison 1 -->
+          <div class="flex gap-5 p-6 rounded-2xl hover:bg-cream transition reveal">
+            <div class="w-12 h-12 rounded-xl bg-ink-900 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="trending-up" class="w-6 h-6 text-white"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-lg text-ink-900 mb-1">Parce que vous perdez de l'argent sans le savoir</h3>
+              <p class="text-ink-500 text-sm leading-relaxed">Entre les commissions oubliées et les soldes mal calculés, un gérant moyen perd des milliers de FCFA chaque mois. MomoTrans calcule votre bénéfice net en temps réel, par opérateur.</p>
+            </div>
+          </div>
+
+          <!-- Raison 2 -->
+          <div class="flex gap-5 p-6 rounded-2xl hover:bg-cream transition reveal">
+            <div class="w-12 h-12 rounded-xl bg-ink-900 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="shield-check" class="w-6 h-6 text-white"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-lg text-ink-900 mb-1">Parce qu'un cahier ne vous protège pas</h3>
+              <p class="text-ink-500 text-sm leading-relaxed">Chaque opération est enregistrée avec date, heure, agent et montant exact. En cas de litige, sortez la preuve en 2 clics. Vos données sont sauvegardées et rien ne se perd jamais.</p>
+            </div>
+          </div>
+
+          <!-- Raison 3 -->
+          <div class="flex gap-5 p-6 rounded-2xl hover:bg-cream transition reveal">
+            <div class="w-12 h-12 rounded-xl bg-ink-900 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="zap" class="w-6 h-6 text-white"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-lg text-ink-900 mb-1">Parce que votre temps, c'est votre argent</h3>
+              <p class="text-ink-500 text-sm leading-relaxed">Une opération s'enregistre en 5 secondes. Pendant que vous écrivez dans un cahier, 3 clients attendent. Avec MomoTrans, vous servez plus de monde, plus vite.</p>
+            </div>
+          </div>
+
+          <!-- Raison 4 -->
+          <div class="flex gap-5 p-6 rounded-2xl hover:bg-cream transition reveal">
+            <div class="w-12 h-12 rounded-xl bg-ink-900 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="bar-chart-3" class="w-6 h-6 text-white"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-lg text-ink-900 mb-1">Parce que vous êtes un patron, pas un comptable</h3>
+              <p class="text-ink-500 text-sm leading-relaxed">Rapports automatiques dès la fermeture : totaux des dépôts, des retraits, bénéfices par opérateur, performance de chaque agent. Vous rentrez chez vous tranquille.</p>
+            </div>
+          </div>
+
+          <!-- Raison 5 -->
+          <div class="flex gap-5 p-6 rounded-2xl hover:bg-cream transition reveal">
+            <div class="w-12 h-12 rounded-xl bg-ink-900 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="globe" class="w-6 h-6 text-white"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-lg text-ink-900 mb-1">Parce que c'est fait pour vous, ici, au Bénin</h3>
+              <p class="text-ink-500 text-sm leading-relaxed">MTN, Moov et Celtiis intégrés. Fonctionne hors ligne. Support WhatsApp en français en moins de 2 heures. Tarifs en FCFA. Une solution née sur le terrain.</p>
+            </div>
+          </div>
+
+          <!-- Raison 6 -->
+          <div class="flex gap-5 p-6 rounded-2xl hover:bg-cream transition reveal">
+            <div class="w-12 h-12 rounded-xl bg-ink-900 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="coffee" class="w-6 h-6 text-white"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-lg text-ink-900 mb-1">Parce que ça coûte moins cher qu'un café par jour</h3>
+              <p class="text-ink-500 text-sm leading-relaxed">2 000 FCFA par mois = 65 FCFA par jour. Une seule opération mieux gérée par jour rentabilise votre abonnement. Et les 2 premiers mois sont entièrement gratuits.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================== SECTION FONCTIONNALITÉS =============================== -->
+  <section id="fonctionnalites" class="py-24 lg:py-32 bg-ink-900 text-white relative overflow-hidden grain">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10 relative z-10">
+      <div class="text-center mb-16 reveal">
+        <span class="inline-block px-4 py-1.5 bg-white/10 text-brand-300 text-xs font-semibold rounded-full mb-4 tracking-wider uppercase">Fonctionnalités</span>
+        <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight">
+          Tout ce dont vous avez besoin.<br />
+          <span class="text-brand-400">Rien de superflu.</span>
+        </h2>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div class="p-6 rounded-2xl bg-white/5 backdrop-blur border border-white/10 hover:border-brand-400/50 transition reveal">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4">
+            <i data-lucide="zap" class="w-6 h-6 text-brand-400"></i>
+          </div>
+          <h3 class="font-bold mb-2">Transactions ultra-rapides</h3>
+          <p class="text-white/60 text-sm">Dépôts, retraits, achats de crédit — en quelques secondes seulement.</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white/5 backdrop-blur border border-white/10 hover:border-brand-400/50 transition reveal">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4">
+            <i data-lucide="wallet" class="w-6 h-6 text-brand-400"></i>
+          </div>
+          <h3 class="font-bold mb-2">Suivi des soldes en direct</h3>
+          <p class="text-white/60 text-sm">MTN, Moov, Celtiis et caisse — à jour à chaque opération.</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white/5 backdrop-blur border border-white/10 hover:border-brand-400/50 transition reveal">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4">
+            <i data-lucide="bar-chart-3" class="w-6 h-6 text-brand-400"></i>
+          </div>
+          <h3 class="font-bold mb-2">Rapports automatiques</h3>
+          <p class="text-white/60 text-sm">Journaliers, hebdomadaires, mensuels — par opérateur ou par agent.</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white/5 backdrop-blur border border-white/10 hover:border-brand-400/50 transition reveal">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4">
+            <i data-lucide="users" class="w-6 h-6 text-brand-400"></i>
+          </div>
+          <h3 class="font-bold mb-2">Gestion multi-utilisateurs</h3>
+          <p class="text-white/60 text-sm">Ajoutez vos agents, attribuez des rôles, contrôlez chaque accès.</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white/5 backdrop-blur border border-white/10 hover:border-brand-400/50 transition reveal">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4">
+            <i data-lucide="store" class="w-6 h-6 text-brand-400"></i>
+          </div>
+          <h3 class="font-bold mb-2">Multi-boutiques</h3>
+          <p class="text-white/60 text-sm">Une seule app pour superviser toutes vos cabines, où que vous soyez.</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white/5 backdrop-blur border border-white/10 hover:border-brand-400/50 transition reveal">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4">
+            <i data-lucide="lock" class="w-6 h-6 text-brand-400"></i>
+          </div>
+          <h3 class="font-bold mb-2">Sécurité maximale</h3>
+          <p class="text-white/60 text-sm">Code PIN, biométrie, sauvegarde cloud, historique inaltérable.</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white/5 backdrop-blur border border-white/10 hover:border-brand-400/50 transition reveal">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4">
+            <i data-lucide="wifi-off" class="w-6 h-6 text-brand-400"></i>
+          </div>
+          <h3 class="font-bold mb-2">Mode hors ligne</h3>
+          <p class="text-white/60 text-sm">Continuez à travailler sans Internet. Synchro automatique au retour.</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-white/5 backdrop-blur border border-white/10 hover:border-brand-400/50 transition reveal">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4">
+            <i data-lucide="bell" class="w-6 h-6 text-brand-400"></i>
+          </div>
+          <h3 class="font-bold mb-2">Alertes intelligentes</h3>
+          <p class="text-white/60 text-sm">Soyez prévenu d'un solde bas ou d'une opération anormale.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================== SECTION TARIFS =============================== -->
+  <section id="tarifs" class="py-24 lg:py-32 bg-cream">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="text-center mb-16 reveal">
+        <span class="inline-block px-4 py-1.5 bg-brand-50 text-brand-600 text-xs font-semibold rounded-full mb-4 tracking-wider uppercase">Tarifs</span>
+        <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-ink-900">
+          Choisissez l'offre qui vous correspond
+        </h2>
+        <p class="mt-4 text-lg text-ink-500">Tous les packs débutent par <span class="font-bold text-brand-500">2 mois gratuits</span>.</p>
+      </div>
+
+      <div class="grid lg:grid-cols-3 gap-6 lg:gap-5">
+
+        <!-- Pack Basic -->
+        <div class="bg-white rounded-3xl p-8 shadow-card flex flex-col reveal">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="w-3 h-3 rounded-full bg-green-500"></span>
+            <h3 class="font-bold text-xl text-ink-900">Basic</h3>
+          </div>
+          <p class="text-ink-500 text-sm mb-6">Pour bien démarrer</p>
+          <div class="mb-6">
+            <span class="text-5xl font-extrabold text-ink-900">Gratuit</span>
+          </div>
+          <ul class="space-y-3 mb-8 flex-1">
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-green-500 flex-shrink-0"></i>MTN, Moov et Celtiis intégrés</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-green-500 flex-shrink-0"></i>1 boutique</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-green-500 flex-shrink-0"></i>2 utilisateurs</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-green-500 flex-shrink-0"></i>Rapport journalier</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-green-500 flex-shrink-0"></i>Support WhatsApp</li>
+          </ul>
+          <a href="#telecharger" class="w-full text-center bg-ink-900 hover:bg-ink-700 text-white font-semibold py-3.5 rounded-full transition">Commencer gratuitement</a>
+        </div>
+
+        <!-- Pack Pro -->
+        <div class="relative bg-ink-900 text-white rounded-3xl p-8 shadow-card flex flex-col scale-105 reveal">
+          <div class="absolute -top-3 left-1/2 -translate-x-1/2 popular-badge text-white text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider">
+            Le plus populaire
+          </div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="w-3 h-3 rounded-full bg-brand-400"></span>
+            <h3 class="font-bold text-xl">Pro</h3>
+          </div>
+          <p class="text-white/60 text-sm mb-6">Pour les gérants ambitieux</p>
+          <div class="mb-6">
+            <span class="text-5xl font-extrabold">2 000</span>
+            <span class="text-white/60 text-sm ml-2">FCFA/mois</span>
+          </div>
+          <ul class="space-y-3 mb-8 flex-1">
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-brand-400 flex-shrink-0"></i>Tout ce qu'inclut le Basic</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-brand-400 flex-shrink-0"></i>Jusqu'à 3 boutiques</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-brand-400 flex-shrink-0"></i>3 utilisateurs par boutique</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-brand-400 flex-shrink-0"></i>Rapports détaillés par opérateur</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-brand-400 flex-shrink-0"></i>Calcul auto des commissions</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-brand-400 flex-shrink-0"></i>Assistance technique prioritaire</li>
+          </ul>
+          <a href="#telecharger" class="w-full text-center bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3.5 rounded-full transition btn-primary">Choisir Pro</a>
+        </div>
+
+        <!-- Pack Premium -->
+        <div class="bg-white rounded-3xl p-8 shadow-card flex flex-col reveal">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="w-3 h-3 rounded-full bg-purple-500"></span>
+            <h3 class="font-bold text-xl text-ink-900">Premium</h3>
+          </div>
+          <p class="text-ink-500 text-sm mb-6">Pour les professionnels exigeants</p>
+          <div class="mb-6">
+            <span class="text-5xl font-extrabold text-ink-900">5 000</span>
+            <span class="text-ink-500 text-sm ml-2">FCFA/mois</span>
+          </div>
+          <ul class="space-y-3 mb-8 flex-1">
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-purple-500 flex-shrink-0"></i>Tout ce qu'inclut le Pro</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-purple-500 flex-shrink-0"></i>Boutiques illimitées</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-purple-500 flex-shrink-0"></i>Utilisateurs illimités</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-purple-500 flex-shrink-0"></i>Tableau de bord web</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-purple-500 flex-shrink-0"></i>Export PDF et Excel</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-purple-500 flex-shrink-0"></i>Marque blanche possible</li>
+            <li class="flex gap-2 text-sm"><i data-lucide="check" class="w-5 h-5 text-purple-500 flex-shrink-0"></i>Assistance prioritaire 7j/7</li>
+          </ul>
+          <a href="#telecharger" class="w-full text-center bg-ink-900 hover:bg-ink-700 text-white font-semibold py-3.5 rounded-full transition">Choisir Premium</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================== SECTION TÉMOIGNAGES =============================== -->
+  <section id="avis" class="py-24 lg:py-32 bg-white">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="text-center mb-16 reveal">
+        <span class="inline-block px-4 py-1.5 bg-yellow-50 text-yellow-700 text-xs font-semibold rounded-full mb-4 tracking-wider uppercase">Témoignages</span>
+        <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-ink-900">
+          Ils ont fait le pas.<br />
+          <span class="text-brand-500">Ils ne reviendraient pour rien au monde.</span>
+        </h2>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <!-- Témoignage 1 -->
+        <div class="p-8 rounded-3xl bg-cream relative reveal">
+          <i data-lucide="quote" class="w-10 h-10 text-brand-200 absolute top-6 right-6"></i>
+          <div class="flex gap-1 mb-4">
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+          </div>
+          <p class="text-ink-700 mb-6 leading-relaxed">
+            « Avant MomoTrans, je passais 2 heures chaque soir à recompter mon cahier. Aujourd'hui, j'ai mon rapport en 1 clic. J'ai retrouvé mes soirées en famille. »
+          </p>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center">
+              <i class="fas fa-store text-white text-lg"></i>
+            </div>
+            <div>
+              <p class="font-bold text-ink-900">Ets Cabinet MTN</p>
+              <p class="text-sm text-ink-500">Cotonou</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Témoignage 2 -->
+        <div class="p-8 rounded-3xl bg-cream relative reveal">
+          <i data-lucide="quote" class="w-10 h-10 text-brand-200 absolute top-6 right-6"></i>
+          <div class="flex gap-1 mb-4">
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+          </div>
+          <p class="text-ink-700 mb-6 leading-relaxed">
+            « J'ai 3 cabines à Porto-Novo. Sans MomoTrans, je serais devenu fou. Maintenant je vois tout depuis mon téléphone, où que je sois. »
+          </p>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
+              <i class="fas fa-store text-white text-lg"></i>
+            </div>
+            <div>
+              <p class="font-bold text-ink-900">Ets Cabinet Moov</p>
+              <p class="text-sm text-ink-500">Porto-Novo</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Témoignage 3 -->
+        <div class="p-8 rounded-3xl bg-cream relative reveal">
+          <i data-lucide="quote" class="w-10 h-10 text-brand-200 absolute top-6 right-6"></i>
+          <div class="flex gap-1 mb-4">
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+            <i data-lucide="star" class="w-4 h-4 text-yellow-500 fill-yellow-500"></i>
+          </div>
+          <p class="text-ink-700 mb-6 leading-relaxed">
+            « Un client m'a accusé d'avoir mal enregistré son dépôt. En 2 secondes, je lui ai montré la preuve. Plus jamais de dispute. »
+          </p>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-green-400 to-teal-500 flex items-center justify-center">
+              <i class="fas fa-store text-white text-lg"></i>
+            </div>
+            <div>
+              <p class="font-bold text-ink-900">Ets Cabinet Celtiis</p>
+              <p class="text-sm text-ink-500">Parakou</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================== SECTION FAQ =============================== -->
+  <section id="faq" class="py-24 lg:py-32 bg-cream">
+    <div class="max-w-4xl mx-auto px-6 lg:px-10">
+      <div class="text-center mb-16 reveal">
+        <span class="inline-block px-4 py-1.5 bg-brand-50 text-brand-600 text-xs font-semibold rounded-full mb-4 tracking-wider uppercase">FAQ</span>
+        <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-ink-900">
+          Vous avez des questions ?<br />
+          <span class="text-brand-500">Nous avons les réponses.</span>
+        </h2>
+      </div>
+
+      <div class="space-y-4 reveal">
+        <details class="group bg-white rounded-2xl p-6 hover:shadow-card transition">
+          <summary class="flex justify-between items-center font-semibold text-ink-900">
+            MomoTrans fonctionne-t-il sans Internet ?
+            <i data-lucide="plus" class="faq-icon w-5 h-5 text-brand-500"></i>
+          </summary>
+          <p class="mt-4 text-ink-500 leading-relaxed">Oui. Toutes vos opérations sont enregistrées localement sur votre téléphone et se synchronisent automatiquement dès que la connexion revient. Vous pouvez travailler toute la journée sans réseau.</p>
+        </details>
+
+        <details class="group bg-white rounded-2xl p-6 hover:shadow-card transition">
+          <summary class="flex justify-between items-center font-semibold text-ink-900">
+            Mes données sont-elles en sécurité ?
+            <i data-lucide="plus" class="faq-icon w-5 h-5 text-brand-500"></i>
+          </summary>
+          <p class="mt-4 text-ink-500 leading-relaxed">Absolument. Vos données sont chiffrées, protégées par code PIN et biométrie, et sauvegardées dans le cloud. Même si vous perdez votre téléphone, vous récupérez tout en quelques minutes sur un nouvel appareil.</p>
+        </details>
+
+        <details class="group bg-white rounded-2xl p-6 hover:shadow-card transition">
+          <summary class="flex justify-between items-center font-semibold text-ink-900">
+            Faut-il être un expert en informatique ?
+            <i data-lucide="plus" class="faq-icon w-5 h-5 text-brand-500"></i>
+          </summary>
+          <p class="mt-4 text-ink-500 leading-relaxed">Non. L'application a été conçue pour être utilisée par n'importe quel gérant, même sans expérience avec les applications mobiles. Si vous savez utiliser WhatsApp, vous saurez utiliser MomoTrans.</p>
+        </details>
+
+        <details class="group bg-white rounded-2xl p-6 hover:shadow-card transition">
+          <summary class="flex justify-between items-center font-semibold text-ink-900">
+            Puis-je essayer avant de payer ?
+            <i data-lucide="plus" class="faq-icon w-5 h-5 text-brand-500"></i>
+          </summary>
+          <p class="mt-4 text-ink-500 leading-relaxed">Oui. Les 2 premiers mois sont entièrement gratuits, sans engagement et sans carte bancaire requise. Vous pouvez tester toutes les fonctionnalités.</p>
+        </details>
+
+        <details class="group bg-white rounded-2xl p-6 hover:shadow-card transition">
+          <summary class="flex justify-between items-center font-semibold text-ink-900">
+            Comment payer mon abonnement ?
+            <i data-lucide="plus" class="faq-icon w-5 h-5 text-brand-500"></i>
+          </summary>
+          <p class="mt-4 text-ink-500 leading-relaxed">Par MTN Mobile Money, Moov Money, Celtiis Cash ou carte bancaire. Choisissez la méthode qui vous arrange.</p>
+        </details>
+
+        <details class="group bg-white rounded-2xl p-6 hover:shadow-card transition">
+          <summary class="flex justify-between items-center font-semibold text-ink-900">
+            Et si j'ai un problème ?
+            <i data-lucide="plus" class="faq-icon w-5 h-5 text-brand-500"></i>
+          </summary>
+          <p class="mt-4 text-ink-500 leading-relaxed">Notre équipe support est disponible sur WhatsApp en français, du lundi au samedi, et répond généralement en moins de 2 heures.</p>
+        </details>
+
+        <details class="group bg-white rounded-2xl p-6 hover:shadow-card transition">
+          <summary class="flex justify-between items-center font-semibold text-ink-900">
+            Puis-je gérer plusieurs cabines ?
+            <i data-lucide="plus" class="faq-icon w-5 h-5 text-brand-500"></i>
+          </summary>
+          <p class="mt-4 text-ink-500 leading-relaxed">Oui, avec les packs Pro (jusqu'à 3 boutiques) et Premium (boutiques illimitées). Vous supervisez tout depuis un seul compte.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================== CTA FINAL =============================== -->
+  <section id="telecharger" class="py-24 lg:py-32 bg-white">
+    <div class="max-w-5xl mx-auto px-6 lg:px-10">
+      <div class="relative bg-brand-500 rounded-3xl lg:rounded-[40px] p-10 lg:p-16 overflow-hidden grain reveal">
+        <!-- Decorative shapes -->
+        <div class="absolute -top-20 -right-20 w-72 h-72 bg-brand-400 rounded-full opacity-50"></div>
+        <div class="absolute -bottom-32 -left-20 w-80 h-80 bg-brand-600 rounded-full opacity-40"></div>
+
+        <div class="relative z-10 text-center">
+          <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight">
+            Vous avez deux choix.
+          </h2>
+          <p class="mt-4 text-xl text-white/90 font-medium">
+            Continuer avec le cahier... ou prendre une longueur d'avance.
+          </p>
+          <p class="mt-6 text-white/80 max-w-2xl mx-auto">
+            Pendant que vous lisez ces lignes, des centaines de gérants au Bénin sont déjà passés à MomoTrans. Ils gagnent du temps. Ils gagnent de l'argent. Ils dorment tranquilles.
+          </p>
+
+          <div class="mt-10 flex justify-center items-center">
+            <a href="#telecharger" class="inline-flex items-center gap-2 bg-black hover:bg-ink-900 text-white text-base font-semibold px-5 py-3 rounded-full transition">
+              Télécharger l'application
+              <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+            </a>
+          </div>
+
+          <p class="mt-8 text-sm text-white/80">
+            ✓ 2 mois offerts &nbsp; • &nbsp; ✓ Aucune carte bancaire requise &nbsp; • &nbsp; ✓ Annulation à tout moment
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================== FOOTER =============================== -->
+  <footer class="bg-ink-900 text-white py-16 lg:py-20">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="grid lg:grid-cols-12 gap-10 lg:gap-12">
+
+        <!-- Brand -->
+        <div class="lg:col-span-4">
+          <div class="mb-5">
+            <img src="{% static 'logo MomoTrans blanc.png' %}" alt="MomoTrans" class="h-20">
+          </div>
+          <p class="text-white/60 max-w-sm mb-6 leading-relaxed">
+            La gestion intelligente pour les cabines Mobile Money. Fait avec ❤️ au Bénin.
+          </p>
+          <div class="flex gap-3">
+            <a href="#" class="w-10 h-10 rounded-full bg-white/10 hover:bg-brand-500 flex items-center justify-center transition text-white">
+              <i class="fab fa-facebook-f text-sm"></i>
+            </a>
+            <a href="#" class="w-10 h-10 rounded-full bg-white/10 hover:bg-brand-500 flex items-center justify-center transition text-white">
+              <i class="fab fa-instagram text-sm"></i>
+            </a>
+            <a href="#" class="w-10 h-10 rounded-full bg-white/10 hover:bg-brand-500 flex items-center justify-center transition text-white">
+              <i class="fab fa-linkedin-in text-sm"></i>
+            </a>
+            <a href="#" class="w-10 h-10 rounded-full bg-white/10 hover:bg-brand-500 flex items-center justify-center transition text-white">
+              <i class="fab fa-tiktok text-sm"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Liens -->
+        <div class="lg:col-span-2">
+          <h4 class="font-bold mb-4">Produit</h4>
+          <ul class="space-y-3 text-sm text-white/60">
+            <li><a href="#fonctionnalites" class="hover:text-white transition">Fonctionnalités</a></li>
+            <li><a href="#tarifs" class="hover:text-white transition">Tarifs</a></li>
+            <li><a href="#telecharger" class="hover:text-white transition">Télécharger</a></li>
+            <li><a href="#" class="hover:text-white transition">Nouveautés</a></li>
+          </ul>
+        </div>
+
+        <div class="lg:col-span-2">
+          <h4 class="font-bold mb-4">Société</h4>
+          <ul class="space-y-3 text-sm text-white/60">
+            <li><a href="#" class="hover:text-white transition">À propos</a></li>
+            <li><a href="#" class="hover:text-white transition">Blog</a></li>
+            <li><a href="#" class="hover:text-white transition">Carrières</a></li>
+            <li><a href="#" class="hover:text-white transition">Contact</a></li>
+          </ul>
+        </div>
+
+        <!-- Contact -->
+        <div class="lg:col-span-4">
+          <h4 class="font-bold mb-4">Contactez-nous</h4>
+          <ul class="space-y-3 text-sm text-white/60">
+            <li class="flex items-center gap-2">
+              <i data-lucide="mail" class="w-4 h-4 text-brand-400"></i>
+              contact@momotrans.bj
+            </li>
+            <li class="flex items-center gap-2">
+              <i data-lucide="phone" class="w-4 h-4 text-brand-400"></i>
+              +229 XX XX XX XX
+            </li>
+            <li class="flex items-center gap-2">
+              <i data-lucide="map-pin" class="w-4 h-4 text-brand-400"></i>
+              Cotonou, Bénin
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="mt-14 pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-white/40">
+        <p>© 2026 MomoTrans. Tous droits réservés.</p>
+        <ul class="flex gap-6">
+          <li><a href="#" class="hover:text-white transition">Conditions générales</a></li>
+          <li><a href="#" class="hover:text-white transition">Confidentialité</a></li>
+          <li><a href="#" class="hover:text-white transition">Cookies</a></li>
+        </ul>
+      </div>
+    </div>
+  </footer>
+
+  <!-- =============================== SCRIPTS =============================== -->
+  <script>
+    // Initialisation des icônes Lucide
+    lucide.createIcons();
+
+    // Menu mobile toggle
+    const btn = document.getElementById('mobileMenuBtn');
+    const menu = document.getElementById('mobileMenu');
+    btn?.addEventListener('click', () => menu.classList.toggle('open'));
+
+    // Compteur animé — social proof
+    const counterEl = document.getElementById('counter-users');
+    const targetValue = 1.5;
+    const duration = 1800;
+    let started = false;
+
+    function animateCounter() {
+      if (started) return;
+      started = true;
+      const startTime = performance.now();
+      function step(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3);
+        const current = (ease * targetValue).toFixed(1);
+        counterEl.textContent = current;
+        if (progress < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    const counterObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        animateCounter();
+        counterObserver.disconnect();
+      }
+    }, { threshold: 0.5 });
+    if (counterEl) counterObserver.observe(document.getElementById('social-proof'));
+
+    // Compteurs animés — section stats
+    function animateStat(el, target, decimals, duration) {
+      let started = false;
+      return function start() {
+        if (started) return;
+        started = true;
+        const startTime = performance.now();
+        function step(now) {
+          const progress = Math.min((now - startTime) / duration, 1);
+          const ease = 1 - Math.pow(1 - progress, 3);
+          el.textContent = (ease * target).toFixed(decimals);
+          if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      };
+    }
+
+    const statsSection = document.getElementById('stats-section');
+    if (statsSection) {
+      const startDownloads = animateStat(document.getElementById('stat-downloads'), 2.3, 1, 1600);
+      const startRating    = animateStat(document.getElementById('stat-rating'),    4.9, 1, 1800);
+      const statsObserver = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+          startDownloads();
+          startRating();
+          statsObserver.disconnect();
+        }
+      }, { threshold: 0.4 });
+      statsObserver.observe(statsSection);
+    }
+
+    // Reveal au scroll
+    const reveals = document.querySelectorAll('.reveal');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+    reveals.forEach(r => observer.observe(r));
+  </script>
+</body>
+</html>
