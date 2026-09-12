@@ -16,5 +16,6 @@ urlpatterns = [
     path('transactions/<uuid:tx_id>/',              views.transaction_detail,   name='transaction_detail'),
     path('abonnements/',                            views.abonnements_view,     name='abonnements'),
     path('avis/',                                   views.avis_view,            name='avis'),
+    path('demandes-suppression/',                   views.demandes_suppression_view, name='demandes_suppression'),
     path('packs/',                                  views.packs_view,           name='packs'),
 ]

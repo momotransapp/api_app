@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MomoTrans — Gérez vos transactions Mobile Money sans stress</title>
   <meta name="description" content="MomoTrans est l'application mobile qui transforme votre cabine Mobile Money en business moderne. MTN, Moov, Celtiis — tout en un seul endroit." />
+  <link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon" />
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -181,7 +182,7 @@
     <nav class="max-w-7xl mx-auto px-6 lg:px-10 py-4 flex items-center justify-between">
       <!-- Logo -->
       <a href="#">
-        <img src="{% static 'logo MomoTrans.png' %}" alt="MomoTrans" class="h-12">
+        <img src="{% static 'logo-momotrans.png' %}" alt="MomoTrans" class="h-12">
       </a>
 
       <!-- Menu desktop -->
@@ -271,17 +272,19 @@
 
           <!-- Ligne de réassurance -->
           <p class="mt-5 text-base text-ink-500">
-             2 mois gratuits &nbsp;•&nbsp; Sans engagement &nbsp;•&nbsp; Fonctionne hors ligne
+             1 mois gratuit &nbsp;•&nbsp; Sans engagement &nbsp;•&nbsp; Fonctionne hors ligne
           </p>
         </div>
 
         <!-- Colonne droite — Mockups téléphones -->
         <div class="relative reveal flex flex-col items-end">
           <!-- Bandeau social proof -->
-          <div id="social-proof" class="inline-flex items-center gap-3 mb-4 relative" style="top: -20px;">
-            <!-- Avatars extraits de Group 4.png -->
-            <div class="overflow-hidden flex-shrink-0" style="width: 135px; height: 65px;">
-              <img src="{% static 'Group 4.png' %}" alt="avatars utilisateurs" style="width: 301px; height: 65px; object-fit: none; object-position: left center;">
+          <div id="social-proof" class="inline-flex items-center gap-4 mb-4 relative" style="top: -20px;">
+            <!-- Avatars utilisateurs (femme au centre, mise en avant) -->
+            <div class="flex items-center flex-shrink-0 -space-x-3">
+              <img src="{% static 'avatar-homme-1.jpg' %}" alt="Gérant utilisateur MomoTrans" class="w-11 h-11 rounded-full border-2 border-white object-cover shadow-sm">
+              <img src="{% static 'avatar-femme.jpg' %}" alt="Gérante utilisatrice MomoTrans" class="w-14 h-14 rounded-full border-2 border-white object-cover shadow-md z-10 -mt-2">
+              <img src="{% static 'avatar-homme-2.jpg' %}" alt="Gérant utilisateur MomoTrans" class="w-11 h-11 rounded-full border-2 border-white object-cover shadow-sm">
             </div>
             <div>
               <p class="font-bold text-ink-900 text-lg leading-tight">
@@ -293,7 +296,7 @@
 
           <!-- Visuel app -->
           <img
-            src="{% static 'Group 22.png' %}"
+            src="{% static 'group-22.png' %}"
             alt="Aperçu de l'application MomoTrans — Rapports, Dashboard et Historique"
             class="w-full h-auto object-contain drop-shadow-2xl"
           />
@@ -302,67 +305,78 @@
     </div>
   </section>
 
+  
   <!-- =============================== SECTION PROBLÈME =============================== -->
-  <section class="py-24 lg:py-32 bg-white">
-    <div class="max-w-6xl mx-auto px-6 lg:px-10">
+  <section class="py-24 lg:py-32 bg-white relative overflow-hidden">
+    <!-- Décor de fond, cohérent avec les sections Solution / CTA -->
+    <div class="absolute -top-24 -left-24 w-96 h-96 bg-brand-50 rounded-full blur-3xl opacity-70 pointer-events-none"></div>
+    <div class="absolute bottom-0 right-0 w-72 h-72 bg-brand-100 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
+
+    <div class="max-w-6xl mx-auto px-6 lg:px-10 relative">
       <div class="text-center reveal">
-        <span class="inline-block px-4 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-full mb-4 tracking-wider uppercase">Le quotidien des gérants</span>
+        <span class="inline-block px-4 py-1.5 bg-brand-50 text-brand-600 text-xs font-semibold rounded-full mb-4 tracking-wider uppercase">Le quotidien des gérants</span>
         <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-ink-900">
           Vous gérez une cabine Mobile Money ?
         </h2>
         <p class="mt-3 text-xl text-ink-500">Alors vous vivez sûrement ça tous les jours...</p>
       </div>
 
-      <div class="mt-16 grid md:grid-cols-2 lg:grid-cols-3 gap-5 reveal">
+      <div class="mt-16 grid md:grid-cols-2 lg:grid-cols-3 gap-5">
         <!-- Problème 1 -->
-        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
-          <div class="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center mb-5">
-            <i data-lucide="trending-down" class="w-6 h-6 text-red-600"></i>
+        <div class="group relative p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card hover:-translate-y-1 transition-all duration-300 border border-transparent hover:border-brand-100 reveal">
+          <span class="absolute top-6 right-7 text-xs font-bold text-ink-300 tabular-nums">01</span>
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
+            <i data-lucide="trending-down" class="w-6 h-6 text-brand-500"></i>
           </div>
           <h3 class="font-bold text-lg text-ink-900 mb-2">Vous perdez de l'argent</h3>
           <p class="text-ink-500 text-sm leading-relaxed">Vous finissez la journée sans savoir combien vous avez vraiment gagné. Les commissions sont calculées à la main, avec des erreurs.</p>
         </div>
 
         <!-- Problème 2 -->
-        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
-          <div class="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center mb-5">
-            <i data-lucide="alert-triangle" class="w-6 h-6 text-orange-600"></i>
+        <div class="group relative p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card hover:-translate-y-1 transition-all duration-300 border border-transparent hover:border-brand-100 reveal" style="transition-delay: 60ms">
+          <span class="absolute top-6 right-7 text-xs font-bold text-ink-300 tabular-nums">02</span>
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
+            <i data-lucide="alert-triangle" class="w-6 h-6 text-brand-500"></i>
           </div>
           <h3 class="font-bold text-lg text-ink-900 mb-2">Des disputes constantes</h3>
           <p class="text-ink-500 text-sm leading-relaxed">Un client conteste une opération et vous n'avez aucune preuve à lui montrer. Vous perdez de l'argent, et la face devant les clients.</p>
         </div>
 
         <!-- Problème 3 -->
-        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
-          <div class="w-12 h-12 rounded-xl bg-yellow-100 flex items-center justify-center mb-5">
-            <i data-lucide="book-x" class="w-6 h-6 text-yellow-700"></i>
+        <div class="group relative p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card hover:-translate-y-1 transition-all duration-300 border border-transparent hover:border-brand-100 reveal" style="transition-delay: 120ms">
+          <span class="absolute top-6 right-7 text-xs font-bold text-ink-300 tabular-nums">03</span>
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
+            <i data-lucide="book-x" class="w-6 h-6 text-brand-500"></i>
           </div>
           <h3 class="font-bold text-lg text-ink-900 mb-2">Cahiers perdus ou abîmés</h3>
           <p class="text-ink-500 text-sm leading-relaxed">Votre cahier est mouillé, déchiré, ou introuvable au moment où vous en avez besoin. Et avec lui, des semaines de données disparaissent.</p>
         </div>
 
         <!-- Problème 4 -->
-        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
-          <div class="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center mb-5">
-            <i data-lucide="user-x" class="w-6 h-6 text-purple-600"></i>
+        <div class="group relative p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card hover:-translate-y-1 transition-all duration-300 border border-transparent hover:border-brand-100 reveal" style="transition-delay: 180ms">
+          <span class="absolute top-6 right-7 text-xs font-bold text-ink-300 tabular-nums">04</span>
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
+            <i data-lucide="user-x" class="w-6 h-6 text-brand-500"></i>
           </div>
           <h3 class="font-bold text-lg text-ink-900 mb-2">Vos agents sans contrôle</h3>
           <p class="text-ink-500 text-sm leading-relaxed">Votre agent fait des erreurs — ou pire, triche — et vous ne le voyez pas. Vous ne pouvez pas tout surveiller en même temps.</p>
         </div>
 
         <!-- Problème 5 -->
-        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
-          <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-5">
-            <i data-lucide="clock" class="w-6 h-6 text-blue-600"></i>
+        <div class="group relative p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card hover:-translate-y-1 transition-all duration-300 border border-transparent hover:border-brand-100 reveal" style="transition-delay: 240ms">
+          <span class="absolute top-6 right-7 text-xs font-bold text-ink-300 tabular-nums">05</span>
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
+            <i data-lucide="clock" class="w-6 h-6 text-brand-500"></i>
           </div>
           <h3 class="font-bold text-lg text-ink-900 mb-2">Des heures perdues le soir</h3>
           <p class="text-ink-500 text-sm leading-relaxed">Vous passez 2 heures chaque soir à recompter vos transactions au lieu de profiter de votre famille ou de vous reposer.</p>
         </div>
 
         <!-- Problème 6 -->
-        <div class="group p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card transition-all border border-transparent hover:border-black/5">
-          <div class="w-12 h-12 rounded-xl bg-teal-100 flex items-center justify-center mb-5">
-            <i data-lucide="zap-off" class="w-6 h-6 text-teal-600"></i>
+        <div class="group relative p-7 rounded-2xl bg-cream hover:bg-white hover:shadow-card hover:-translate-y-1 transition-all duration-300 border border-transparent hover:border-brand-100 reveal" style="transition-delay: 300ms">
+          <span class="absolute top-6 right-7 text-xs font-bold text-ink-300 tabular-nums">06</span>
+          <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
+            <i data-lucide="zap-off" class="w-6 h-6 text-brand-500"></i>
           </div>
           <h3 class="font-bold text-lg text-ink-900 mb-2">Soldes à zéro sans alerte</h3>
           <p class="text-ink-500 text-sm leading-relaxed">Vous voyez votre solde MTN à zéro alors qu'un client attend depuis 10 minutes. Vous perdez la vente — et le client.</p>
@@ -386,7 +400,7 @@
           <div class="absolute w-80 h-80 lg:w-[420px] lg:h-[420px] bg-[#1E90FF] rounded-full z-0"></div>
           <!-- Image flottante -->
           <img
-            src="{% static 'Groupe 2 copie.png' %}"
+            src="{% static 'groupe-2-copie.png' %}"
             alt="Mockup application MomoTrans"
             class="relative z-10 w-full max-w-md h-auto object-contain drop-shadow-2xl float-anim"
           />
@@ -533,7 +547,7 @@
             </div>
             <div>
               <h3 class="font-bold text-lg text-ink-900 mb-1">Parce que ça coûte moins cher qu'un café par jour</h3>
-              <p class="text-ink-500 text-sm leading-relaxed">2 000 FCFA par mois = 65 FCFA par jour. Une seule opération mieux gérée par jour rentabilise votre abonnement. Et les 2 premiers mois sont entièrement gratuits.</p>
+              <p class="text-ink-500 text-sm leading-relaxed">2 000 FCFA par mois = 65 FCFA par jour. Une seule opération mieux gérée par jour rentabilise votre abonnement. Et le premier mois est entièrement gratuit.</p>
             </div>
           </div>
         </div>
@@ -628,7 +642,7 @@
         <h2 class="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-ink-900">
           Choisissez l'offre qui vous correspond
         </h2>
-        <p class="mt-4 text-lg text-ink-500">Tous les packs débutent par <span class="font-bold text-brand-500">2 mois gratuits</span>.</p>
+        <p class="mt-4 text-lg text-ink-500">Tous les packs débutent par <span class="font-bold text-brand-500">1 mois gratuit</span>.</p>
       </div>
 
       <div class="grid lg:grid-cols-3 gap-6 lg:gap-5">
@@ -832,7 +846,7 @@
             Puis-je essayer avant de payer ?
             <i data-lucide="plus" class="faq-icon w-5 h-5 text-brand-500"></i>
           </summary>
-          <p class="mt-4 text-ink-500 leading-relaxed">Oui. Les 2 premiers mois sont entièrement gratuits, sans engagement et sans carte bancaire requise. Vous pouvez tester toutes les fonctionnalités.</p>
+          <p class="mt-4 text-ink-500 leading-relaxed">Oui. Le premier mois est entièrement gratuit, sans engagement et sans carte bancaire requise. Vous pouvez tester toutes les fonctionnalités.</p>
         </details>
 
         <details class="group bg-white rounded-2xl p-6 hover:shadow-card transition">
@@ -889,7 +903,7 @@
           </div>
 
           <p class="mt-8 text-sm text-white/80">
-            ✓ 2 mois offerts &nbsp; • &nbsp; ✓ Aucune carte bancaire requise &nbsp; • &nbsp; ✓ Annulation à tout moment
+            ✓ 1 mois offert &nbsp; • &nbsp; ✓ Aucune carte bancaire requise &nbsp; • &nbsp; ✓ Annulation à tout moment
           </p>
         </div>
       </div>
@@ -904,7 +918,7 @@
         <!-- Brand -->
         <div class="lg:col-span-4">
           <div class="mb-5">
-            <img src="{% static 'logo MomoTrans blanc.png' %}" alt="MomoTrans" class="h-20">
+            <img src="{% static 'logo-momotrans-blanc.png' %}" alt="MomoTrans" class="h-20">
           </div>
           <p class="text-white/60 max-w-sm mb-6 leading-relaxed">
             La gestion intelligente pour les cabines Mobile Money. Fait avec ❤️ au Bénin.
@@ -969,9 +983,9 @@
       <div class="mt-14 pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-white/40">
         <p>© 2026 MomoTrans. Tous droits réservés.</p>
         <ul class="flex gap-6">
-          <li><a href="#" class="hover:text-white transition">Conditions générales</a></li>
-          <li><a href="#" class="hover:text-white transition">Confidentialité</a></li>
-          <li><a href="#" class="hover:text-white transition">Cookies</a></li>
+          <li><a href="{% url 'conditions_utilisation' %}" class="hover:text-white transition">Conditions générales</a></li>
+          <li><a href="{% url 'politique_confidentialite' %}" class="hover:text-white transition">Confidentialité</a></li>
+          <li><a href="{% url 'demande_suppression_compte' %}" class="hover:text-white transition">Suppression de compte</a></li>
         </ul>
       </div>
     </div>

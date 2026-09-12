@@ -117,6 +117,7 @@ class Abonnement(models.Model):
     fin          = models.DateField()
     fin_periode_gratuite = models.DateField(null=True, blank=True)
     prochain_prelevement = models.DateField(null=True, blank=True)
+    fedapay_transaction_id = models.CharField(max_length=50, null=True, blank=True, db_index=True)
     cree_le      = models.DateTimeField(auto_now_add=True)
     mis_a_jour   = models.DateTimeField(auto_now=True)
 
@@ -228,6 +229,8 @@ class Transaction(models.Model):
     # Champ spécifique Crédit
     type_credit    = models.CharField(max_length=10, choices=TYPE_CREDIT_CHOICES, blank=True)
     date           = models.DateTimeField(default=timezone.now)
+    archivee       = models.BooleanField(default=False)
+    archivee_le    = models.DateTimeField(null=True, blank=True)
     cree_le        = models.DateTimeField(auto_now_add=True)
     mis_a_jour     = models.DateTimeField(auto_now=True)
 
@@ -322,3 +325,32 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"[{self.type}] {self.titre} → {self.utilisateur.email}"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# DEMANDE DE SUPPRESSION DE COMPTE
+# ══════════════════════════════════════════════════════════════════════
+
+class DemandeSuppressionCompte(models.Model):
+    STATUT_CHOICES = [
+        ('en_attente', 'En attente'),
+        ('traitee',    'Traitée — compte supprimé'),
+        ('rejetee',    'Rejetée'),
+    ]
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    telephone   = models.CharField(max_length=30, blank=True)
+    email       = models.EmailField(blank=True)
+    raison      = models.TextField(blank=True)
+    statut      = models.CharField(max_length=20, choices=STATUT_CHOICES, default='en_attente')
+    cree_le     = models.DateTimeField(auto_now_add=True)
+    traite_le   = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-cree_le']
+        verbose_name = "Demande de suppression de compte"
+        verbose_name_plural = "Demandes de suppression de compte"
+
+    def __str__(self):
+        contact = self.telephone or self.email or '(sans contact)'
+        return f"Suppression demandée par {contact} ({self.get_statut_display()})"

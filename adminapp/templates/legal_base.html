@@ -1,0 +1,73 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}MomoTrans{% endblock %}</title>
+  <link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#EEF4FF', 100: '#DCE7FF', 200: '#B9CFFF', 300: '#8DB1FF',
+              400: '#5C8DFF', 500: '#2D6FF7', 600: '#1E5FE6', 700: '#1A4FBF',
+              800: '#1B4399', 900: '#1C3A7A'
+            },
+            ink: { 900: '#0F1115', 700: '#2A2E37', 500: '#5B6271', 300: '#A0A7B5' },
+            cream: '#F4F6FA'
+          },
+          fontFamily: { sans: ['"Ubuntu"', 'system-ui', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body { font-family: 'Ubuntu', sans-serif; background: #F4F6FA; color: #0F1115; }
+    .prose h2 { font-size: 1.25rem; font-weight: 800; color: #0F1115; margin-top: 2rem; margin-bottom: 0.75rem; }
+    .prose h2:first-child { margin-top: 0; }
+    .prose p, .prose li { color: #5B6271; line-height: 1.75; margin-bottom: 0.75rem; }
+    .prose ul { list-style: disc; padding-left: 1.25rem; margin-bottom: 0.75rem; }
+    .prose strong { color: #0F1115; }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="antialiased">
+
+  <header class="sticky top-0 z-50 bg-cream/80 backdrop-blur-lg border-b border-black/5">
+    <nav class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+      <a href="{% url 'home' %}" class="flex items-center gap-2">
+        <img src="{% static 'logo-momotrans.png' %}" alt="MomoTrans" class="h-10">
+      </a>
+      <a href="{% url 'home' %}" class="text-sm font-semibold text-brand-500 hover:text-brand-600 transition">
+        ← Retour à l'accueil
+      </a>
+    </nav>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-6 py-16">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="bg-ink-900 text-white/60 py-10 mt-16">
+    <div class="max-w-4xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-sm">
+      <p>© 2026 MomoTrans. Tous droits réservés.</p>
+      <ul class="flex gap-6">
+        <li><a href="{% url 'conditions_utilisation' %}" class="hover:text-white transition">Conditions d'utilisation</a></li>
+        <li><a href="{% url 'politique_confidentialite' %}" class="hover:text-white transition">Confidentialité</a></li>
+        <li><a href="{% url 'demande_suppression_compte' %}" class="hover:text-white transition">Suppression de compte</a></li>
+      </ul>
+    </div>
+  </footer>
+
+</body>
+</html>

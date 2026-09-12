@@ -1,0 +1,111 @@
+{% extends 'legal_base.html' %}
+{% block title %}Suppression du compte — MomoTrans{% endblock %}
+
+{% block content %}
+<div class="reveal max-w-xl mx-auto">
+  <span class="inline-block px-4 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-full mb-4 tracking-wider uppercase">Compte</span>
+  <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-ink-900 mb-3">Supprimer votre compte MomoTrans</h1>
+
+  {% if envoye %}
+    <div class="bg-white rounded-3xl p-10 shadow-card text-center">
+      <div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-5">
+        <i data-lucide="check" class="w-8 h-8 text-green-600"></i>
+      </div>
+      <h2 class="text-xl font-bold text-ink-900 mb-2">Demande envoyée</h2>
+      <p class="text-ink-500 leading-relaxed">
+        Après réception de votre demande, nous procéderons aux vérifications nécessaires afin de confirmer
+        que la demande concerne bien le titulaire du compte. Une fois la demande validée, le compte et les
+        données concernées seront supprimés conformément à notre politique de confidentialité. Vous recevrez
+        une confirmation à l'adresse email ou au numéro de téléphone associé à votre demande lorsque cela
+        est possible.
+      </p>
+      <a href="{% url 'home' %}" class="inline-block mt-8 bg-brand-500 hover:bg-brand-600 text-white font-semibold px-6 py-3 rounded-full transition">
+        Retour à l'accueil
+      </a>
+    </div>
+  {% else %}
+    <p class="text-ink-500 mb-8 leading-relaxed">
+      Vous souhaitez supprimer définitivement votre compte MomoTrans ? Cette page vous permet de demander
+      la suppression de votre compte et des données qui lui sont associées.
+    </p>
+
+    <div class="bg-red-50 border border-red-100 rounded-2xl p-6 mb-8">
+      <h2 class="font-bold text-ink-900 mb-3">Avant de continuer</h2>
+      <p class="text-sm text-ink-700 mb-3">La suppression de votre compte peut entraîner la suppression définitive de :</p>
+      <ul class="text-sm text-ink-700 space-y-1.5 mb-3">
+        <li>• Votre profil utilisateur ;</li>
+        <li>• Votre numéro de téléphone associé au compte ;</li>
+        <li>• Vos boutiques ;</li>
+        <li>• Les utilisateurs associés à vos boutiques ;</li>
+        <li>• Vos transactions enregistrées ;</li>
+        <li>• Vos rapports ;</li>
+        <li>• Vos commissions ;</li>
+        <li>• Vos soldes et historiques de soldes ;</li>
+        <li>• Vos autres données associées au compte.</li>
+      </ul>
+      <p class="text-xs text-ink-500 leading-relaxed">
+        Certaines données peuvent exceptionnellement être conservées lorsque la loi, la sécurité, la
+        prévention de la fraude ou une autre obligation légitime l'exige. Les éventuelles données conservées
+        seront traitées conformément à notre
+        <a href="{% url 'politique_confidentialite' %}" class="text-brand-500 font-semibold hover:underline">politique de confidentialité</a>.
+      </p>
+    </div>
+
+    <div class="bg-white rounded-3xl p-8 shadow-card">
+      <h2 class="font-bold text-ink-900 mb-5">Formulaire de demande</h2>
+      <form method="post">
+        {% csrf_token %}
+
+        {% if messages %}
+          {% for message in messages %}
+            <div class="bg-red-50 text-red-600 text-sm font-medium rounded-xl px-4 py-3 mb-5">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+
+        <label class="block text-sm font-semibold text-ink-900 mb-2">Numéro de téléphone associé au compte</label>
+        <input
+          type="tel" name="telephone" placeholder="+229 XX XX XX XX"
+          class="w-full bg-gray-100 rounded-xl px-4 py-3 mb-5 outline-none focus:ring-2 focus:ring-brand-400"
+        />
+
+        <label class="block text-sm font-semibold text-ink-900 mb-2">Adresse e-mail, si disponible</label>
+        <input
+          type="email" name="email" placeholder="exemple@email.com"
+          class="w-full bg-gray-100 rounded-xl px-4 py-3 mb-5 outline-none focus:ring-2 focus:ring-brand-400"
+        />
+
+        <label class="block text-sm font-semibold text-ink-900 mb-2">Motif de la demande — facultatif</label>
+        <textarea
+          name="raison" rows="4" placeholder="Dites-nous pourquoi vous souhaitez supprimer votre compte (facultatif)"
+          class="w-full bg-gray-100 rounded-xl px-4 py-3 mb-5 outline-none focus:ring-2 focus:ring-brand-400"
+        ></textarea>
+
+        <label class="flex items-start gap-3 mb-6 cursor-pointer">
+          <input type="checkbox" name="confirmation" required class="mt-1 w-4 h-4 accent-brand-500 flex-shrink-0" />
+          <span class="text-sm text-ink-700 leading-relaxed">
+            Je comprends que la suppression de mon compte peut entraîner la suppression définitive de mes
+            données associées.
+          </span>
+        </label>
+
+        <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3.5 rounded-full transition">
+          Demander la suppression de mon compte
+        </button>
+      </form>
+    </div>
+
+    <div class="bg-white rounded-2xl p-6 mt-8 shadow-card">
+      <h2 class="font-bold text-ink-900 mb-2">Besoin d'aide ?</h2>
+      <p class="text-sm text-ink-500 mb-4 leading-relaxed">
+        Si vous ne pouvez pas accéder à votre compte ou si vous rencontrez un problème avec la procédure de
+        suppression, contactez notre assistance :
+      </p>
+      <p class="text-sm text-ink-700"><strong>Email :</strong> contact@momotrans.com</p>
+      <p class="text-sm text-ink-700"><strong>Téléphone / WhatsApp :</strong> +229 01 XX XX XX XX</p>
+    </div>
+  {% endif %}
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script>lucide.createIcons();</script>
+{% endblock %}

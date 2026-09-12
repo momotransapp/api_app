@@ -79,18 +79,22 @@ class PackSerializer(serializers.ModelSerializer):
 class AbonnementSerializer(serializers.ModelSerializer):
     pack_detail = PackSerializer(source='pack', read_only=True)
     est_actif   = serializers.SerializerMethodField()
+    est_illimite = serializers.SerializerMethodField()
 
     class Meta:
         model  = Abonnement
         fields = [
             'id', 'pack', 'pack_detail', 'statut',
             'debut', 'fin', 'fin_periode_gratuite',
-            'prochain_prelevement', 'est_actif', 'cree_le',
+            'prochain_prelevement', 'est_actif', 'est_illimite', 'cree_le',
         ]
         read_only_fields = ['id', 'utilisateur', 'cree_le']
 
     def get_est_actif(self, obj):
         return obj.est_actif()
+
+    def get_est_illimite(self, obj):
+        return obj.pack.cle == 'basic'
 
 
 class SouscrireAbonnementSerializer(serializers.Serializer):
@@ -178,10 +182,11 @@ class TransactionSerializer(serializers.ModelSerializer):
             'id', 'type', 'operateur', 'montant', 'commission',
             'numero_client', 'nom_client', 'reference', 'remarque',
             'type_credit', 'date',
+            'archivee', 'archivee_le',
             'effectuee_par', 'effectuee_par_nom',
             'boutique', 'cree_le',
         ]
-        read_only_fields = ['id', 'boutique', 'effectuee_par', 'cree_le']
+        read_only_fields = ['id', 'boutique', 'effectuee_par', 'cree_le', 'archivee_le']
 
     def get_effectuee_par_nom(self, obj):
         if obj.effectuee_par:

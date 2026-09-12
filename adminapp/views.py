@@ -22,6 +22,46 @@ def home(request):
     return render(request, 'home.html')
 
 
+def paiement_retour(request):
+    """Page affichée dans le navigateur après un paiement FedaPay (callback_url).
+    L'app mobile ferme elle-même la fenêtre de paiement et vérifie le statut
+    via l'API ; cette page ne sert qu'à donner un retour visuel à l'utilisateur."""
+    return render(request, 'paiement_retour.html')
+
+
+def conditions_utilisation(request):
+    return render(request, 'conditions_utilisation.html')
+
+
+def politique_confidentialite(request):
+    return render(request, 'politique_confidentialite.html')
+
+
+def demande_suppression_compte(request):
+    """
+    Page publique (accessible depuis l'app mobile ET le web, requis par les
+    politiques Play Store sur la suppression de compte) permettant de
+    demander la suppression d'un compte en fournissant son numéro de
+    téléphone et/ou son email.
+    """
+    envoye = False
+    if request.method == 'POST':
+        telephone = request.POST.get('telephone', '').strip()
+        email     = request.POST.get('email', '').strip().lower()
+        raison    = request.POST.get('raison', '').strip()
+        confirme  = request.POST.get('confirmation') == 'on'
+
+        if not telephone and not email:
+            messages.error(request, "Veuillez indiquer votre numéro de téléphone ou votre adresse email.")
+        elif not confirme:
+            messages.error(request, "Veuillez confirmer que vous comprenez les conséquences de la suppression.")
+        else:
+            DemandeSuppressionCompte.objects.create(telephone=telephone, email=email, raison=raison)
+            envoye = True
+
+    return render(request, 'suppression_compte.html', {'envoye': envoye})
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  AUTH
 # ══════════════════════════════════════════════════════════════════════════
@@ -394,6 +434,56 @@ def avis_view(request):
         'avis_list': qs,
         'total': qs.count(),
         'non_lus': Avis.objects.filter(lu=False).count(),
+        'filtre': filtre,
+    })
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  DEMANDES DE SUPPRESSION DE COMPTE
+# ══════════════════════════════════════════════════════════════════════════
+
+@staff_required
+def demandes_suppression_view(request):
+    filtre = request.GET.get('filtre', 'en_attente')
+
+    qs = DemandeSuppressionCompte.objects.order_by('-cree_le')
+    if filtre != 'tous':
+        qs = qs.filter(statut=filtre)
+
+    if request.method == 'POST':
+        demande_id = request.POST.get('demande_id')
+        action     = request.POST.get('action')
+        demande    = get_object_or_404(DemandeSuppressionCompte, id=demande_id)
+
+        if action == 'supprimer_compte':
+            contact = demande.email or demande.telephone
+            utilisateur = None
+            if demande.email:
+                utilisateur = Utilisateur.objects.filter(email__iexact=demande.email).first()
+            if not utilisateur and demande.telephone:
+                utilisateur = Utilisateur.objects.filter(telephone=demande.telephone).first()
+
+            if utilisateur:
+                utilisateur.delete()
+                messages.success(request, f"Compte {contact} supprimé définitivement.")
+            else:
+                messages.warning(request, f"Aucun compte trouvé pour {contact} (peut-être déjà supprimé).")
+            demande.statut    = 'traitee'
+            demande.traite_le = timezone.now()
+            demande.save()
+        elif action == 'rejeter':
+            demande.statut    = 'rejetee'
+            demande.traite_le = timezone.now()
+            demande.save()
+            messages.success(request, "Demande rejetée.")
+
+        return redirect(f"{request.path}?filtre={filtre}")
+
+    return render(request, 'dashboard/demandes_suppression.html', {
+        'page': 'demandes_suppression',
+        'demandes': qs,
+        'total': qs.count(),
+        'en_attente': DemandeSuppressionCompte.objects.filter(statut='en_attente').count(),
         'filtre': filtre,
     })
 

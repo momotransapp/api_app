@@ -1,0 +1,40 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MomoTrans — Paiement</title>
+  <link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon" />
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, sans-serif;
+      background: #F4F6FA;
+      color: #0F1115;
+      text-align: center;
+      padding: 24px;
+    }
+    .card { max-width: 360px; }
+    .icon {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #2D6FF7; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; margin: 0 auto 20px;
+    }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { color: #5B6271; font-size: 15px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✓</div>
+    <h1>Paiement traité</h1>
+    <p>Vous pouvez fermer cette fenêtre et retourner sur l'application MomoTrans pour voir le statut de votre abonnement.</p>
+  </div>
+</body>
+</html>

@@ -2,20 +2,45 @@ import random
 import string
 from datetime import date, timedelta
 
+import fedapay as fedapay_sdk
+from django.conf import settings
 from django.contrib.auth import authenticate
+from django.core.mail import send_mail
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from . import fedapay_client
 from .models import *
 from .serializers import *
 from .permissions import (
     EstVerifie, EstMembreBoutique, EstProprietaireBoutique,
     AAbonnementActif, APackAvance, get_abonnement_actif,
+    boutiques_autorisees_ids,
 )
 from django.db.models import Sum, Q
+
+
+def _verifier_acces_boutique(boutique, utilisateur):
+    """
+    Vérifie que l'utilisateur est membre actif de la boutique ET que celle-ci
+    reste dans la limite actuelle de l'abonnement de son propriétaire (les
+    boutiques les plus anciennes restent accessibles en priorité si
+    l'abonnement a expiré sans être renouvelé).
+    """
+    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=utilisateur, actif=True).exists():
+        return False, "Accès refusé."
+    if boutique.id not in boutiques_autorisees_ids(boutique.proprietaire):
+        return False, (
+            "Cette boutique n'est plus accessible : l'abonnement de son "
+            "propriétaire ne couvre plus ce nombre de boutiques. "
+            "Renouvelez l'abonnement pour la réactiver."
+        )
+    return True, None
+
 
 def creer_notification(utilisateur, type_notif: str, titre: str, message: str = '', boutique=None):
     """
@@ -55,6 +80,31 @@ def creer_code(utilisateur, type_code):
     )
 
 
+def envoyer_code_email(utilisateur, code_obj):
+    """Envoie le code de vérification/réinitialisation par email (best-effort)."""
+    if code_obj.type == 'email':
+        sujet   = "Vérifiez votre compte MomoTrans"
+        message = (
+            f"Bonjour {utilisateur.prenom},\n\n"
+            f"Voici votre code de vérification MomoTrans : {code_obj.code}\n"
+            f"Ce code expire dans 15 minutes.\n\n"
+            f"Si vous n'êtes pas à l'origine de cette demande, ignorez cet email."
+        )
+    else:
+        sujet   = "Réinitialisation de votre mot de passe MomoTrans"
+        message = (
+            f"Bonjour {utilisateur.prenom},\n\n"
+            f"Voici votre code de réinitialisation de mot de passe MomoTrans : {code_obj.code}\n"
+            f"Ce code expire dans 15 minutes.\n\n"
+            f"Si vous n'êtes pas à l'origine de cette demande, ignorez cet email."
+        )
+    try:
+        send_mail(sujet, message, settings.DEFAULT_FROM_EMAIL, [utilisateur.email], fail_silently=False)
+    except Exception as e:
+        print(f"[EMAIL] Échec d'envoi à {utilisateur.email} : {e}")
+        print(f"[DEV] Code {code_obj.type} pour {utilisateur.email} : {code_obj.code}")
+
+
 def tokens_pour(utilisateur):
     refresh = RefreshToken.for_user(utilisateur)
     return {
@@ -80,10 +130,9 @@ def inscription(request):
 
     utilisateur = serializer.save()
 
-    # Générer et (simuler) envoyer le code
+    # Générer et envoyer le code de vérification
     code_obj = creer_code(utilisateur, 'email')
-    # TODO: envoyer par email → send_mail(...)
-    print(f"[DEV] Code vérification email : {code_obj.code}")
+    envoyer_code_email(utilisateur, code_obj)
 
     # Abonnement Basic gratuit automatique
     pack_basic = Pack.objects.get(cle='basic')
@@ -173,7 +222,7 @@ def connexion(request):
     if not utilisateur.is_active:
         # Renvoyer un nouveau code
         code_obj = creer_code(utilisateur, 'email')
-        print(f"[DEV] Code vérification renvoyé : {code_obj.code}")
+        envoyer_code_email(utilisateur, code_obj)
         return Response({
             "error": "Compte non activé.",
             "message": "Un nouveau code a été envoyé à votre adresse email.",
@@ -209,8 +258,7 @@ def mot_de_passe_oublie(request):
         return Response({"message": "Si cet email existe, un code a été envoyé."})
 
     code_obj = creer_code(utilisateur, 'reset')
-    print(f"[DEV] Code reset : {code_obj.code}")
-    # TODO: envoyer par email
+    envoyer_code_email(utilisateur, code_obj)
 
     return Response({"message": "Si cet email existe, un code a été envoyé."})
 
@@ -321,13 +369,35 @@ def mon_abonnement(request):
     return Response(AbonnementSerializer(abo).data)
 
 
+def _map_statut_fedapay(statut_fedapay):
+    if statut_fedapay == 'approved':
+        return 'actif'
+    if statut_fedapay in ('declined', 'canceled'):
+        return 'annule'
+    return 'en_attente'
+
+
+def _activer_abonnement_paye(abo):
+    """Active un abonnement 'en_attente' suite à un paiement FedaPay confirmé."""
+    if abo.statut == 'actif':
+        return
+    Abonnement.objects.filter(
+        utilisateur=abo.utilisateur, statut='actif'
+    ).exclude(id=abo.id).update(statut='annule')
+    abo.statut = 'actif'
+    abo.debut  = date.today()
+    abo.save(update_fields=['statut', 'debut'])
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, EstVerifie])
 def souscrire_abonnement(request):
     """
     POST /abonnements/souscrire/
     {"pack_cle": "pro"}
-    Souscrit ou change de pack.
+    Souscrit ou change de pack. Les packs payants déclenchent une transaction
+    FedaPay : l'abonnement reste "en_attente" jusqu'à confirmation du paiement
+    (webhook ou vérification via /abonnements/paiement/<id>/statut/).
     """
     serializer = SouscrireAbonnementSerializer(data=request.data)
     if not serializer.is_valid():
@@ -340,11 +410,6 @@ def souscrire_abonnement(request):
     except Pack.DoesNotExist:
         return Response({"error": "Pack introuvable."}, status=404)
 
-    # Annuler l'abonnement actif actuel
-    Abonnement.objects.filter(
-        utilisateur=request.user, statut='actif'
-    ).update(statut='annule')
-
     today = date.today()
     fin_periode_gratuite = None
     prochain_prelevement = None
@@ -356,17 +421,125 @@ def souscrire_abonnement(request):
     else:
         fin = date(9999, 12, 31) if pack.cle == 'basic' else today + timedelta(days=30)
 
+    # ── Pack gratuit : activation immédiate, aucun paiement requis ──
+    if pack.prix_mensuel <= 0:
+        Abonnement.objects.filter(
+            utilisateur=request.user, statut='actif'
+        ).update(statut='annule')
+
+        abo = Abonnement.objects.create(
+            utilisateur=request.user,
+            pack=pack,
+            statut='actif',
+            debut=today,
+            fin=fin,
+            fin_periode_gratuite=fin_periode_gratuite,
+            prochain_prelevement=prochain_prelevement,
+        )
+        return Response(AbonnementSerializer(abo).data, status=201)
+
+    # ── Pack payant : créer la transaction FedaPay et renvoyer le lien de paiement ──
     abo = Abonnement.objects.create(
         utilisateur=request.user,
         pack=pack,
-        statut='actif',
+        statut='en_attente',
         debut=today,
         fin=fin,
         fin_periode_gratuite=fin_periode_gratuite,
         prochain_prelevement=prochain_prelevement,
     )
 
-    return Response(AbonnementSerializer(abo).data, status=201)
+    try:
+        transaction = fedapay_client.creer_transaction(
+            description=f"Abonnement MomoTrans — {pack.nom}",
+            montant=pack.prix_mensuel,
+            email=request.user.email,
+            prenom=request.user.prenom,
+            nom=request.user.nom,
+            callback_url=request.build_absolute_uri(reverse('paiement_retour')),
+        )
+        lien = fedapay_client.generer_lien_paiement(transaction['id'])
+    except fedapay_client.FedaPayError:
+        abo.delete()
+        return Response(
+            {"error": "Impossible d'initier le paiement. Veuillez réessayer."}, status=502
+        )
+
+    abo.fedapay_transaction_id = str(transaction['id'])
+    abo.save(update_fields=['fedapay_transaction_id'])
+
+    return Response({
+        "abonnement": AbonnementSerializer(abo).data,
+        "paiement": {
+            "transaction_id": transaction['id'],
+            "montant": int(pack.prix_mensuel),
+            "devise": "XOF",
+            "payment_url": lien.get('url'),
+        },
+    }, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def statut_paiement(request, transaction_id):
+    """
+    GET /abonnements/paiement/<transaction_id>/statut/
+    Filet de sécurité pour l'app mobile : si le webhook n'est pas (encore)
+    configuré ou n'est pas encore arrivé, on interroge directement FedaPay.
+    """
+    abo = Abonnement.objects.filter(
+        utilisateur=request.user, fedapay_transaction_id=str(transaction_id)
+    ).first()
+    if not abo:
+        return Response({"error": "Paiement introuvable."}, status=404)
+
+    if abo.statut == 'en_attente':
+        try:
+            transaction = fedapay_client.recuperer_transaction(transaction_id)
+        except fedapay_client.FedaPayError:
+            transaction = None
+
+        if transaction:
+            nouveau_statut = _map_statut_fedapay(transaction.get('status', ''))
+            if nouveau_statut == 'actif':
+                _activer_abonnement_paye(abo)
+            elif nouveau_statut == 'annule':
+                abo.statut = 'annule'
+                abo.save(update_fields=['statut'])
+
+    return Response(AbonnementSerializer(abo).data)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def fedapay_webhook(request):
+    """
+    POST /abonnements/paiement/webhook/
+    Endpoint appelé par FedaPay (à configurer dans Workbench → Webhooks avec
+    l'URL publique de cet endpoint). Vérifie la signature avant tout traitement.
+    """
+    signature = request.headers.get('X-FEDAPAY-SIGNATURE', '')
+    try:
+        event = fedapay_sdk.Webhook.construct_event(
+            request.body, signature, settings.FEDAPAY_WEBHOOK_SECRET,
+        )
+    except Exception:
+        return Response({"error": "Signature invalide."}, status=400)
+
+    entite = event.get('entity') or {}
+    transaction_id = str(entite.get('id', ''))
+    statut_fedapay = entite.get('status', '')
+
+    abo = Abonnement.objects.filter(fedapay_transaction_id=transaction_id).first()
+    if abo:
+        nouveau_statut = _map_statut_fedapay(statut_fedapay)
+        if nouveau_statut == 'actif':
+            _activer_abonnement_paye(abo)
+        elif nouveau_statut == 'annule' and abo.statut != 'annule':
+            abo.statut = 'annule'
+            abo.save(update_fields=['statut'])
+
+    return Response({"received": True})
 
 
 @api_view(['GET'])
@@ -459,11 +632,9 @@ def detail_boutique(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    est_membre = MembreBoutique.objects.filter(
-        boutique=boutique, utilisateur=request.user, actif=True
-    ).exists()
-    if not est_membre:
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     if request.method == 'GET':
         return Response(BoutiqueSerializer(boutique).data)
@@ -493,14 +664,21 @@ def _verifier_limite_membres(boutique):
     """Vérifie si la boutique peut accueillir un membre supplémentaire."""
     proprietaire = boutique.proprietaire
     abo = get_abonnement_actif(proprietaire)
-    if not abo:
-        return False, "Propriétaire sans abonnement actif."
+    # Basic est l'offre gratuite permanente : elle reste valable même si une
+    # ancienne ligne d'abonnement est absente ou expirée.
+    pack = abo.pack if abo else Pack.objects.filter(cle='basic', actif=True).first()
+    if not pack:
+        return False, "Aucune offre disponible pour le propriétaire."
 
-    max_u = abo.pack.max_utilisateurs
+    max_u = pack.max_utilisateurs
     if max_u == -1:
         return True, None
 
-    nb = MembreBoutique.objects.filter(boutique=boutique, actif=True).count()
+    # La limite du pack concerne les collaborateurs ajoutés. Le propriétaire,
+    # créé automatiquement avec sa boutique, ne consomme pas cette place.
+    nb = MembreBoutique.objects.filter(
+        boutique=boutique, actif=True,
+    ).exclude(role='proprietaire').count()
     if nb >= max_u:
         return False, f"Votre pack permet au maximum {max_u} utilisateur(s) par boutique."
     return True, None
@@ -518,8 +696,9 @@ def membres_boutique(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     if request.method == 'GET':
         membres = MembreBoutique.objects.filter(boutique=boutique, actif=True).select_related('utilisateur')
@@ -547,8 +726,16 @@ def membres_boutique(request, boutique_id):
     except Utilisateur.DoesNotExist:
         return Response({"error": "Aucun compte trouvé pour ce contact."}, status=404)
 
-    if MembreBoutique.objects.filter(boutique=boutique, utilisateur=nouveau).exists():
-        return Response({"error": "Cet utilisateur est déjà membre de la boutique."}, status=409)
+    existant = MembreBoutique.objects.filter(boutique=boutique, utilisateur=nouveau).first()
+    if existant:
+        if existant.actif:
+            return Response({"error": "Cet utilisateur est déjà membre de la boutique."}, status=409)
+        # Ancien membre retiré : on réactive son adhésion plutôt que d'en créer
+        # une nouvelle (contrainte unique_together sur boutique/utilisateur).
+        existant.actif = True
+        existant.role = serializer.validated_data['role']
+        existant.save()
+        return Response(MembreBoutiqueSerializer(existant).data, status=201)
 
     membre = MembreBoutique.objects.create(
         boutique=boutique,
@@ -598,8 +785,9 @@ def soldes_boutique(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     soldes = SoldeOperateur.objects.filter(boutique=boutique)
     return Response(SoldeOperateurSerializer(soldes, many=True).data)
@@ -617,8 +805,9 @@ def mettre_a_jour_soldes(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     serializer = MiseAJourSoldesSerializer(data=request.data)
     if not serializer.is_valid():
@@ -638,6 +827,30 @@ def mettre_a_jour_soldes(request, boutique_id):
 #  TRANSACTIONS
 # ══════════════════════════════════════════════════════════════════════════
 
+def _ajuster_soldes(boutique, type_tx, operateur, montant, sens=1):
+    """
+    Applique (sens=1) ou annule (sens=-1) l'impact d'une transaction sur les
+    soldes Opérateur et Caisse.
+    Dépôt/Crédit : opérateur -montant, caisse +montant (sens=1)
+    Retrait      : caisse -montant, opérateur +montant (sens=1)
+    """
+    try:
+        solde_operateur = SoldeOperateur.objects.get(boutique=boutique, operateur=operateur)
+        solde_caisse = SoldeOperateur.objects.get(boutique=boutique, operateur='Caisse')
+    except SoldeOperateur.DoesNotExist:
+        return
+
+    if type_tx in ('Depot', 'Credit'):
+        solde_operateur.montant -= sens * montant
+        solde_caisse.montant += sens * montant
+    elif type_tx == 'Retrait':
+        solde_caisse.montant -= sens * montant
+        solde_operateur.montant += sens * montant
+
+    solde_operateur.save()
+    solde_caisse.save()
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated, EstVerifie])
 def transactions_boutique(request, boutique_id):
@@ -651,8 +864,9 @@ def transactions_boutique(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     if request.method == 'GET':
         qs = Transaction.objects.filter(boutique=boutique)
@@ -696,43 +910,19 @@ def transactions_boutique(request, boutique_id):
         titre=f"Une opération de {transaction.type.lower()} a été effectuée",
         boutique=boutique,
     )
-    
-    # Mettre à jour les soldes : Opérateur et Caisse
-    try:
-        # Solde de l'opérateur (MTN, Moov, Celtiis, etc.)
-        solde_operateur = SoldeOperateur.objects.get(boutique=boutique, operateur=transaction.operateur)
-        # Solde de la Caisse
-        solde_caisse = SoldeOperateur.objects.get(boutique=boutique, operateur='Caisse')
-        
-        if transaction.type == 'Depot':
-            # Dépôt : Opérateur diminue (-), Caisse augmente (+)
-            solde_operateur.montant -= transaction.montant
-            solde_caisse.montant += transaction.montant
-        elif transaction.type == 'Retrait':
-            # Retrait : Caisse diminue (-), Opérateur augmente (+)
-            solde_caisse.montant -= transaction.montant
-            solde_operateur.montant += transaction.montant
-        elif transaction.type == 'Credit':
-            # Crédit/Forfait : Opérateur diminue (-), Caisse augmente (+)
-            solde_operateur.montant -= transaction.montant
-            solde_caisse.montant += transaction.montant
-        
-        solde_operateur.save()
-        solde_caisse.save()
-    except SoldeOperateur.DoesNotExist:
-        # Créer les soldes s'ils n'existent pas
-        pass
+
+    _ajuster_soldes(boutique, transaction.type, transaction.operateur, transaction.montant, sens=1)
 
     return Response(TransactionSerializer(transaction).data, status=201)
 
 
-@api_view(['GET', 'PATCH', 'DELETE'])
+@api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated, EstVerifie])
 def detail_transaction(request, boutique_id, transaction_id):
     """
     GET    /boutiques/<boutique_id>/transactions/<transaction_id>/
     PATCH  /boutiques/<boutique_id>/transactions/<transaction_id>/
-    DELETE /boutiques/<boutique_id>/transactions/<transaction_id>/
+    PATCH avec {"archivee": true|false} archive ou restaure l'opération.
     """
     try:
         boutique = Boutique.objects.get(id=boutique_id)
@@ -740,16 +930,52 @@ def detail_transaction(request, boutique_id, transaction_id):
     except (Boutique.DoesNotExist, Transaction.DoesNotExist):
         return Response({"error": "Introuvable."}, status=404)
 
-    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     if request.method == 'GET':
         return Response(TransactionSerializer(transaction).data)
 
     if request.method == 'PATCH':
+        # Une archive reste visible, mais annule son impact sur les soldes.
+        # Désarchiver réalise strictement l'opération inverse.
+        if 'archivee' in request.data:
+            archivee = bool(request.data['archivee'])
+            if transaction.archivee != archivee:
+                _ajuster_soldes(
+                    boutique, transaction.type, transaction.operateur, transaction.montant,
+                    sens=-1 if archivee else 1,
+                )
+                transaction.archivee = archivee
+                transaction.archivee_le = timezone.now() if archivee else None
+                transaction.save(update_fields=['archivee', 'archivee_le', 'mis_a_jour'])
+                creer_notification(
+                    utilisateur=request.user,
+                    type_notif='modification',
+                    titre=("Transaction archivée : son effet sur les soldes a été annulé."
+                           if archivee else "Transaction désarchivée : son effet sur les soldes a été restauré."),
+                    boutique=boutique,
+                )
+            return Response(TransactionSerializer(transaction).data)
+
+        if transaction.archivee:
+            return Response({"error": "Restaurez la transaction avant de la modifier."}, status=400)
+
+        # Capturer l'impact actuel avant modification, pour pouvoir l'annuler
+        ancien_type, ancien_operateur, ancien_montant = (
+            transaction.type, transaction.operateur, transaction.montant
+        )
+
         serializer = TransactionSerializer(transaction, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+
+            # Annuler l'ancien impact puis appliquer le nouveau (gère aussi
+            # le cas où le type/l'opérateur/le montant ont changé).
+            _ajuster_soldes(boutique, ancien_type, ancien_operateur, ancien_montant, sens=-1)
+            _ajuster_soldes(boutique, transaction.type, transaction.operateur, transaction.montant, sens=1)
+
             creer_notification(
                 utilisateur=request.user,
                 type_notif='modification',
@@ -760,41 +986,6 @@ def detail_transaction(request, boutique_id, transaction_id):
             )
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
-
-    if request.method == 'DELETE':
-        # Annuler l'impact sur les soldes (opérateur et caisse)
-        try:
-            solde_operateur = SoldeOperateur.objects.get(boutique=boutique, operateur=transaction.operateur)
-            solde_caisse = SoldeOperateur.objects.get(boutique=boutique, operateur='Caisse')
-            
-            if transaction.type == 'Depot':
-                # Annuler dépôt : Opérateur augmente (+), Caisse diminue (-)
-                solde_operateur.montant += transaction.montant
-                solde_caisse.montant -= transaction.montant
-            elif transaction.type == 'Retrait':
-                # Annuler retrait : Caisse augmente (+), Opérateur diminue (-)
-                solde_caisse.montant += transaction.montant
-                solde_operateur.montant -= transaction.montant
-            elif transaction.type == 'Credit':
-                # Annuler crédit : Opérateur augmente (+), Caisse diminue (-)
-                solde_operateur.montant += transaction.montant
-                solde_caisse.montant -= transaction.montant
-            
-            solde_operateur.save()
-            solde_caisse.save()
-            
-            creer_notification(
-                utilisateur=request.user,
-                type_notif='suppression',
-                titre=f"Suppression d'une opération de {transaction.type.lower()}",
-                boutique=boutique,
-            )
-        except SoldeOperateur.DoesNotExist:
-            pass
-
-        transaction.delete()
-        return Response({"message": "Transaction supprimée."})
-
 
 # ══════════════════════════════════════════════════════════════════════════
 #  RAPPORTS
@@ -822,12 +1013,13 @@ def rapport_journalier(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     date_str = request.query_params.get('date', str(date.today()))
 
-    qs = Transaction.objects.filter(boutique=boutique, date__date=date_str)
+    qs = Transaction.objects.filter(boutique=boutique, archivee=False, date__date=date_str)
 
     totaux = qs.aggregate(
         total_depots=Sum('montant', filter=Q(type='Depot')),
@@ -861,8 +1053,9 @@ def rapport_par_operateur(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     ok, msg = _verifier_acces_rapports(request.user, boutique)
     if not ok:
@@ -873,11 +1066,12 @@ def rapport_par_operateur(request, boutique_id):
     rapport = []
 
     for op in operateurs:
-        qs = Transaction.objects.filter(boutique=boutique, operateur=op, date__date=date_str)
+        qs = Transaction.objects.filter(boutique=boutique, archivee=False, operateur=op, date__date=date_str)
         totaux = qs.aggregate(
             total_depots=Sum('montant', filter=Q(type='Depot')),
             total_retraits=Sum('montant', filter=Q(type='Retrait')),
             total_credits=Sum('montant', filter=Q(type='Credit')),
+            total_commissions=Sum('commission'),
         )
         try:
             solde = SoldeOperateur.objects.get(boutique=boutique, operateur=op).montant
@@ -889,6 +1083,7 @@ def rapport_par_operateur(request, boutique_id):
             "total_depots":      totaux['total_depots'] or 0,
             "total_retraits":    totaux['total_retraits'] or 0,
             "total_credits":     totaux['total_credits'] or 0,
+            "total_commissions": totaux['total_commissions'] or 0,
             "solde_restant":     solde,
         })
 
@@ -906,8 +1101,9 @@ def solde_global(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     soldes = SoldeOperateur.objects.filter(boutique=boutique)
     data = [{"operateur": s.operateur, "montant": s.montant} for s in soldes]
@@ -929,8 +1125,9 @@ def rapport_commissions(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=request.user, actif=True).exists():
-        return Response({"error": "Accès refusé."}, status=403)
+    ok, msg = _verifier_acces_boutique(boutique, request.user)
+    if not ok:
+        return Response({"error": msg}, status=403)
 
     ok, msg = _verifier_acces_rapports(request.user, boutique)
     if not ok:
@@ -939,7 +1136,7 @@ def rapport_commissions(request, boutique_id):
     date_debut = request.query_params.get('date_debut', str(date.today()))
     date_fin   = request.query_params.get('date_fin', str(date.today()))
 
-    qs = Transaction.objects.filter(boutique=boutique, date__date__gte=date_debut, date__date__lte=date_fin)
+    qs = Transaction.objects.filter(boutique=boutique, archivee=False, date__date__gte=date_debut, date__date__lte=date_fin)
 
     rapport = []
     for op in ['MTN', 'Moov', 'Celtiis']:

@@ -1,0 +1,14 @@
+# Environnement
+.env
+env/
+venv/
+__pycache__/
+*.pyc
+
+# Django
+staticfiles/
+
+# Éditeurs / OS
+.vscode/
+.idea/
+Thumbs.db

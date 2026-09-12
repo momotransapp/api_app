@@ -22,6 +22,12 @@ urlpatterns = [
     path('abonnements/souscrire/',             views.souscrire_abonnement,           name='souscrire_abonnement'),
     path('abonnements/historique/',            views.historique_abonnements,         name='historique_abonnements'),
 
+    # ── Paiement FedaPay ──────────────────────────────────────────────────
+    path('abonnements/paiement/webhook/',
+         views.fedapay_webhook,                                                      name='fedapay_webhook'),
+    path('abonnements/paiement/<int:transaction_id>/statut/',
+         views.statut_paiement,                                                      name='statut_paiement'),
+
     # ── Boutiques ─────────────────────────────────────────────────────────
     path('boutiques/',                         views.mes_boutiques,                  name='mes_boutiques'),
     path('boutiques/<uuid:boutique_id>/',      views.detail_boutique,                name='detail_boutique'),

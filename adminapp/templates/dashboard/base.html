@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}Admin{% endblock %} — MomoTrans Dashboard</title>
 {% load static %}
+<link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -1023,6 +1024,12 @@ input[type="date"]:focus { border-color: var(--accent); }
         <span class="nav-icon">💬</span> Avis
         {% if avis_non_lus > 0 %}
         <span class="nav-badge">{{ avis_non_lus }}</span>
+        {% endif %}
+      </a>
+      <a href="{% url 'dashboard:demandes_suppression' %}" class="nav-item {% if page == 'demandes_suppression' %}active{% endif %}">
+        <span class="nav-icon">🗑️</span> Suppressions de compte
+        {% if demandes_suppression_en_attente > 0 %}
+        <span class="nav-badge">{{ demandes_suppression_en_attente }}</span>
         {% endif %}
       </a>
     </div>

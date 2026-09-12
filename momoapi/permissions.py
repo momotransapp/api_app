@@ -13,6 +13,36 @@ def get_abonnement_actif(utilisateur):
     )
 
 
+def get_limites_effectives(utilisateur):
+    """
+    Retourne (max_boutiques, max_utilisateurs) selon l'abonnement actif de
+    l'utilisateur, ou les limites du pack Basic (palier plancher gratuit) si
+    son abonnement payant a expiré sans être renouvelé.
+    """
+    abo = get_abonnement_actif(utilisateur)
+    if abo:
+        return abo.pack.max_boutiques, abo.pack.max_utilisateurs
+    basic = Pack.objects.filter(cle='basic').first()
+    if basic:
+        return basic.max_boutiques, basic.max_utilisateurs
+    return 0, 0
+
+
+def boutiques_autorisees_ids(proprietaire):
+    """
+    IDs des boutiques du propriétaire qui restent accessibles compte tenu de
+    ses limites actuelles (les plus anciennes d'abord). Utilisé pour couper
+    l'accès aux boutiques en trop quand un abonnement expire sans être
+    renouvelé, tout en gardant les plus anciennes actives.
+    """
+    from .models import Boutique
+    max_boutiques, _ = get_limites_effectives(proprietaire)
+    qs = Boutique.objects.filter(proprietaire=proprietaire, active=True).order_by('cree_le')
+    if max_boutiques == -1:
+        return set(qs.values_list('id', flat=True))
+    return set(qs.values_list('id', flat=True)[:max_boutiques])
+
+
 class EstVerifie(BasePermission):
     """L'utilisateur doit avoir vérifié son email."""
     message = "Veuillez vérifier votre adresse email."

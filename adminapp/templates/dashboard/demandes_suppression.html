@@ -1,0 +1,94 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Suppressions de compte{% endblock %}
+{% block header_title %}Demandes de suppression de compte{% endblock %}
+{% block breadcrumb %}Support › Suppressions de compte{% endblock %}
+
+{% block content %}
+
+<div class="page-top">
+  <div>
+    <div class="page-heading">Demandes de suppression 🗑️</div>
+    <div class="page-sub">
+      {{ total }} demande{{ total|pluralize }}
+      {% if en_attente > 0 %}
+      · <span style="color:var(--red);font-weight:500">{{ en_attente }} en attente</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Filtres -->
+<div style="display:flex;gap:8px;margin-bottom:24px">
+  <a href="?filtre=en_attente" class="btn {% if filtre == 'en_attente' %}btn-primary{% else %}btn-ghost{% endif %}">
+    En attente
+    {% if en_attente > 0 %}<span style="background:var(--red);color:#fff;padding:1px 6px;border-radius:10px;font-size:10px">{{ en_attente }}</span>{% endif %}
+  </a>
+  <a href="?filtre=traitee" class="btn {% if filtre == 'traitee' %}btn-primary{% else %}btn-ghost{% endif %}">Traitées</a>
+  <a href="?filtre=rejetee" class="btn {% if filtre == 'rejetee' %}btn-primary{% else %}btn-ghost{% endif %}">Rejetées</a>
+  <a href="?filtre=tous"    class="btn {% if filtre == 'tous' %}btn-primary{% else %}btn-ghost{% endif %}">Toutes</a>
+</div>
+
+{% if demandes %}
+<div style="display:flex;flex-direction:column;gap:12px">
+  {% for d in demandes %}
+  <div class="panel" style="{% if d.statut == 'en_attente' %}border-color:rgba(30,136,229,0.3);{% endif %}">
+    <div style="padding:18px 20px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px">
+        <div>
+          {% if d.telephone %}<div style="font-weight:600;color:var(--text);font-size:14px">📞 {{ d.telephone }}</div>{% endif %}
+          {% if d.email %}<div style="font-weight:{% if d.telephone %}400{% else %}600{% endif %};color:{% if d.telephone %}var(--text2){% else %}var(--text){% endif %};font-size:{% if d.telephone %}12px{% else %}14px{% endif %}">✉️ {{ d.email }}</div>{% endif %}
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">Demandé le {{ d.cree_le|date:"d/m/Y à H:i" }}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          {% if d.statut == 'en_attente' %}
+          <span class="badge badge-blue">● En attente</span>
+          {% elif d.statut == 'traitee' %}
+          <span class="badge badge-green">✓ Traitée</span>
+          {% else %}
+          <span class="badge" style="background:var(--bg3);color:var(--text2)">✕ Rejetée</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if d.raison %}
+      <div style="font-size:14px;color:var(--text);line-height:1.7;padding:14px;background:var(--bg3);border-radius:10px;border:1px solid var(--border);margin-bottom:12px">
+        {{ d.raison }}
+      </div>
+      {% endif %}
+
+      {% if d.statut == 'en_attente' %}
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <form method="post" action="?filtre={{ filtre }}" style="display:inline"
+              onsubmit="return confirm('Supprimer définitivement le compte {{ d.telephone|default:d.email }} et toutes ses données (boutiques, transactions) ? Cette action est irréversible.')">
+          {% csrf_token %}
+          <input type="hidden" name="demande_id" value="{{ d.id }}">
+          <input type="hidden" name="action" value="supprimer_compte">
+          <button type="submit" class="btn btn-danger btn-sm">🗑 Supprimer le compte</button>
+        </form>
+        <form method="post" action="?filtre={{ filtre }}" style="display:inline"
+              onsubmit="return confirm('Rejeter cette demande de suppression ?')">
+          {% csrf_token %}
+          <input type="hidden" name="demande_id" value="{{ d.id }}">
+          <input type="hidden" name="action" value="rejeter">
+          <button type="submit" class="btn btn-ghost btn-sm">Rejeter</button>
+        </form>
+      </div>
+      {% elif d.traite_le %}
+      <div style="font-size:11px;color:var(--text3)">Traitée le {{ d.traite_le|date:"d/m/Y à H:i" }}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="panel">
+  <div class="empty" style="padding:64px">
+    <div style="font-size:40px;margin-bottom:12px">🗑️</div>
+    Aucune demande
+    {% if filtre != 'tous' %}dans cette catégorie{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
