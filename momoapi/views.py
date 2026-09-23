@@ -1,6 +1,6 @@
 import random
 import string
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 import fedapay as fedapay_sdk
 from django.conf import settings
@@ -40,6 +40,38 @@ def _verifier_acces_boutique(boutique, utilisateur):
             "Renouvelez l'abonnement pour la réactiver."
         )
     return True, None
+
+
+def _date_rapport(request, parameter='date'):
+    """Retourne une date ISO valide, jamais postérieure au jour de Porto-Novo."""
+    raw_value = request.query_params.get(parameter)
+    today_benin = timezone.localdate()
+    if not raw_value:
+        return today_benin, None
+    try:
+        selected_date = date.fromisoformat(raw_value)
+    except (TypeError, ValueError):
+        return None, Response(
+            {"error": "La date doit être au format AAAA-MM-JJ."}, status=400
+        )
+    if selected_date > today_benin:
+        return None, Response(
+            {"error": "La date du rapport ne peut pas être postérieure à aujourd’hui."}, status=400
+        )
+    return selected_date, None
+
+
+def _transactions_du_jour(boutique, selected_date):
+    """Filtre une journée civile complète dans le fuseau Africa/Porto-Novo."""
+    benin_tz = timezone.get_current_timezone()
+    start = timezone.make_aware(datetime.combine(selected_date, time.min), benin_tz)
+    end = start + timedelta(days=1)
+    return Transaction.objects.filter(
+        boutique=boutique,
+        archivee=False,
+        date__gte=start,
+        date__lt=end,
+    )
 
 
 def creer_notification(utilisateur, type_notif: str, titre: str, message: str = '', boutique=None):
@@ -1017,9 +1049,10 @@ def rapport_journalier(request, boutique_id):
     if not ok:
         return Response({"error": msg}, status=403)
 
-    date_str = request.query_params.get('date', str(date.today()))
-
-    qs = Transaction.objects.filter(boutique=boutique, archivee=False, date__date=date_str)
+    selected_date, error_response = _date_rapport(request)
+    if error_response:
+        return error_response
+    qs = _transactions_du_jour(boutique, selected_date)
 
     totaux = qs.aggregate(
         total_depots=Sum('montant', filter=Q(type='Depot')),
@@ -1033,7 +1066,7 @@ def rapport_journalier(request, boutique_id):
     total_credits    = totaux['total_credits']    or 0
 
     return Response({
-        "date": date_str,
+        "date": selected_date.isoformat(),
         "boutique": str(boutique_id),
         "total_depots": total_depots,
         "total_retraits": total_retraits,
@@ -1061,12 +1094,14 @@ def rapport_par_operateur(request, boutique_id):
     if not ok:
         return Response({"error": msg}, status=403)
 
-    date_str = request.query_params.get('date', str(date.today()))
+    selected_date, error_response = _date_rapport(request)
+    if error_response:
+        return error_response
     operateurs = ['MTN', 'Moov', 'Celtiis']
     rapport = []
 
     for op in operateurs:
-        qs = Transaction.objects.filter(boutique=boutique, archivee=False, operateur=op, date__date=date_str)
+        qs = _transactions_du_jour(boutique, selected_date).filter(operateur=op)
         totaux = qs.aggregate(
             total_depots=Sum('montant', filter=Q(type='Depot')),
             total_retraits=Sum('montant', filter=Q(type='Retrait')),
@@ -1133,10 +1168,28 @@ def rapport_commissions(request, boutique_id):
     if not ok:
         return Response({"error": msg}, status=403)
 
-    date_debut = request.query_params.get('date_debut', str(date.today()))
-    date_fin   = request.query_params.get('date_fin', str(date.today()))
-
-    qs = Transaction.objects.filter(boutique=boutique, archivee=False, date__date__gte=date_debut, date__date__lte=date_fin)
+    # Le client mobile envoie une seule date. Les deux paramètres historiques
+    # restent acceptés afin de ne pas casser les anciennes versions.
+    if request.query_params.get('date'):
+        selected_date, error_response = _date_rapport(request)
+        if error_response:
+            return error_response
+        qs = _transactions_du_jour(boutique, selected_date)
+    else:
+        date_debut, error_response = _date_rapport(request, 'date_debut')
+        if error_response:
+            return error_response
+        date_fin, error_response = _date_rapport(request, 'date_fin')
+        if error_response:
+            return error_response
+        if date_debut > date_fin:
+            return Response({"error": "La date de début doit précéder la date de fin."}, status=400)
+        benin_tz = timezone.get_current_timezone()
+        start = timezone.make_aware(datetime.combine(date_debut, time.min), benin_tz)
+        end = timezone.make_aware(datetime.combine(date_fin + timedelta(days=1), time.min), benin_tz)
+        qs = Transaction.objects.filter(
+            boutique=boutique, archivee=False, date__gte=start, date__lt=end,
+        )
 
     rapport = []
     for op in ['MTN', 'Moov', 'Celtiis']:
