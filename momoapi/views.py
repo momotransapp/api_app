@@ -1,3 +1,4 @@
+import logging
 import random
 import string
 from datetime import date, datetime, time, timedelta
@@ -8,7 +9,8 @@ from django.contrib.auth import authenticate
 from django.core.mail import send_mail
 from django.urls import reverse
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -21,7 +23,15 @@ from .permissions import (
     AAbonnementActif, APackAvance, get_abonnement_actif,
     boutiques_autorisees_ids,
 )
-from django.db.models import Sum, Q
+from django.db import transaction as db_transaction
+from django.db.models import Avg, Sum, Q
+
+logger = logging.getLogger(__name__)
+
+
+class CodesAuthThrottle(AnonRateThrottle):
+    # Limite par IP les endpoints publics liés aux codes envoyés par email
+    scope = 'codes_auth'
 
 
 def _verifier_acces_boutique(boutique, utilisateur):
@@ -102,8 +112,60 @@ def generer_code():
     return ''.join(random.choices(string.digits, k=6))
 
 
+# Limites anti-abus sur les codes envoyés par email
+CODE_DELAI_RENVOI   = timedelta(seconds=60)   # un code au plus par minute
+CODE_MAX_PAR_HEURE  = 5                       # et 5 codes par heure
+CODE_MAX_TENTATIVES = 5                       # saisies erronées avant invalidation
+
+
+def envoi_code_autorise(utilisateur, type_code):
+    """Empêche d'inonder une boîte mail de codes (bots, saisies répétées)."""
+    maintenant = timezone.now()
+    recents = CodeVerification.objects.filter(
+        utilisateur=utilisateur, type=type_code, cree_le__gte=maintenant - timedelta(hours=1),
+    )
+    if recents.count() >= CODE_MAX_PAR_HEURE:
+        return False
+    return not recents.filter(cree_le__gte=maintenant - CODE_DELAI_RENVOI).exists()
+
+
+def controler_code(utilisateur, type_code, code_saisi, consommer):
+    """
+    Vérifie le dernier code envoyé. Chaque erreur est comptée et le code est
+    invalidé après CODE_MAX_TENTATIVES essais (protection contre la force brute).
+    Retourne un message d'erreur, ou None si le code est bon.
+    """
+    code_obj = (
+        CodeVerification.objects
+        .filter(utilisateur=utilisateur, type=type_code, utilise=False)
+        .order_by('-cree_le')
+        .first()
+    )
+    if not code_obj or not code_obj.est_valide():
+        return "Code invalide ou expiré."
+    if code_obj.code != code_saisi:
+        code_obj.tentatives += 1
+        if code_obj.tentatives >= CODE_MAX_TENTATIVES:
+            code_obj.utilise = True
+            code_obj.save(update_fields=['tentatives', 'utilise'])
+            return "Trop d'essais incorrects. Demandez un nouveau code."
+        code_obj.save(update_fields=['tentatives'])
+        return "Code invalide ou expiré."
+    if consommer:
+        code_obj.utilise = True
+        code_obj.save(update_fields=['utilise'])
+    return None
+
+
+def ip_client(request):
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    return forwarded.split(',')[0].strip() if forwarded else request.META.get('REMOTE_ADDR', '')
+
+
 def creer_code(utilisateur, type_code):
-    CodeVerification.objects.filter(utilisateur=utilisateur, type=type_code, utilise=False).delete()
+    # Les anciens codes sont invalidés (et non supprimés) pour garder
+    # l'historique servant aux limites d'envoi.
+    CodeVerification.objects.filter(utilisateur=utilisateur, type=type_code, utilise=False).update(utilise=True)
     return CodeVerification.objects.create(
         utilisateur=utilisateur,
         code=generer_code(),
@@ -137,6 +199,11 @@ def envoyer_code_email(utilisateur, code_obj):
         print(f"[DEV] Code {code_obj.type} pour {utilisateur.email} : {code_obj.code}")
 
 
+def trouver_utilisateur(email):
+    """Recherche insensible à la casse (comptes créés avant la normalisation)."""
+    return Utilisateur.objects.filter(email__iexact=email).first()
+
+
 def tokens_pour(utilisateur):
     refresh = RefreshToken.for_user(utilisateur)
     return {
@@ -160,21 +227,23 @@ def inscription(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
-    utilisateur = serializer.save()
+    with db_transaction.atomic():
+        utilisateur = serializer.save()
 
-    # Générer et envoyer le code de vérification
-    code_obj = creer_code(utilisateur, 'email')
+        # Abonnement Basic gratuit automatique
+        pack_basic = Pack.objects.get(cle='basic')
+        Abonnement.objects.create(
+            utilisateur=utilisateur,
+            pack=pack_basic,
+            statut='actif',
+            debut=date.today(),
+            fin=date(9999, 12, 31),
+        )
+        code_obj = creer_code(utilisateur, 'email')
+
+    # Envoi après la création : un échec d'email n'annule pas le compte,
+    # l'utilisateur peut redemander un code depuis l'écran de vérification.
     envoyer_code_email(utilisateur, code_obj)
-
-    # Abonnement Basic gratuit automatique
-    pack_basic = Pack.objects.get(cle='basic')
-    Abonnement.objects.create(
-        utilisateur=utilisateur,
-        pack=pack_basic,
-        statut='actif',
-        debut=date.today(),
-        fin=date(9999, 12, 31),
-    )
 
     return Response({
         "message": "Compte créé. Veuillez vérifier votre email.",
@@ -188,6 +257,7 @@ def inscription(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([CodesAuthThrottle])
 def verifier_code(request):
     """
     POST /auth/verifier-code/
@@ -197,33 +267,27 @@ def verifier_code(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
-    try:
-        utilisateur = Utilisateur.objects.get(email=serializer.validated_data['email'])
-    except Utilisateur.DoesNotExist:
+    utilisateur = trouver_utilisateur(serializer.validated_data['email'])
+    if not utilisateur:
         return Response({"error": "Utilisateur introuvable."}, status=404)
 
-    code_obj = (
-        CodeVerification.objects
-        .filter(
-            utilisateur=utilisateur,
-            code=serializer.validated_data['code'],
-            type=serializer.validated_data['type'],
-            utilise=False,
-        )
-        .order_by('-cree_le')
-        .first()
+    type_code = serializer.validated_data['type']
+    erreur = controler_code(
+        utilisateur, type_code, serializer.validated_data['code'],
+        # Le code « reset » sera de nouveau exigé par reinitialiser_mot_de_passe
+        consommer=(type_code == 'email'),
     )
+    if erreur:
+        return Response({"error": erreur}, status=400)
 
-    if not code_obj or not code_obj.est_valide():
-        return Response({"error": "Code invalide ou expiré."}, status=400)
-
-    code_obj.utilise = True
-    code_obj.save()
-
-    if serializer.validated_data['type'] == 'email':
+    if type_code == 'email':
         utilisateur.is_verified = True
-        utilisateur.save()
-        return Response({"message": "Email vérifié avec succès.", **tokens_pour(utilisateur)})
+        utilisateur.save(update_fields=['is_verified'])
+        return Response({
+            "message": "Email vérifié avec succès.",
+            "utilisateur": UtilisateurSerializer(utilisateur).data,
+            **tokens_pour(utilisateur),
+        })
 
     return Response({"message": "Code valide. Vous pouvez réinitialiser votre mot de passe."})
 
@@ -243,22 +307,24 @@ def connexion(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
-    utilisateur = authenticate(
+    compte = trouver_utilisateur(serializer.validated_data['email'])
+    utilisateur = compte and authenticate(
         request,
-        username=serializer.validated_data['email'],
+        username=compte.email,
         password=serializer.validated_data['password'],
     )
     if not utilisateur:
         return Response({"error": "Email ou mot de passe incorrect."}, status=401)
 
-    if not utilisateur.is_active:
-        # Renvoyer un nouveau code
-        code_obj = creer_code(utilisateur, 'email')
-        envoyer_code_email(utilisateur, code_obj)
+    if not utilisateur.is_verified:
+        # Renvoyer un code (dans la limite anti-abus) et envoyer l'app
+        # vers l'écran de vérification.
+        if envoi_code_autorise(utilisateur, 'email'):
+            envoyer_code_email(utilisateur, creer_code(utilisateur, 'email'))
         return Response({
-            "error": "Compte non activé.",
-            "message": "Un nouveau code a été envoyé à votre adresse email.",
-            'user_email': utilisateur.email,
+            "error": "Compte non vérifié. Entrez le code envoyé à votre adresse email.",
+            "code": "compte_non_verifie",
+            "user_email": utilisateur.email,
         }, status=403)
 
     return Response({
@@ -274,6 +340,28 @@ def connexion(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([CodesAuthThrottle])
+def renvoyer_code_verification(request):
+    """
+    POST /auth/renvoyer-code/  {"email": "..."}
+    Renvoie un code de vérification d'email (compte pas encore vérifié).
+    """
+    serializer = MotDePasseOublieSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    reponse = Response({"message": "Si ce compte attend une vérification, un code a été envoyé."})
+    utilisateur = trouver_utilisateur(serializer.validated_data['email'])
+    if not utilisateur or utilisateur.is_verified or not envoi_code_autorise(utilisateur, 'email'):
+        return reponse
+
+    envoyer_code_email(utilisateur, creer_code(utilisateur, 'email'))
+    return reponse
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([CodesAuthThrottle])
 def mot_de_passe_oublie(request):
     """
     POST /auth/mot-de-passe-oublie/
@@ -283,10 +371,16 @@ def mot_de_passe_oublie(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
-    try:
-        utilisateur = Utilisateur.objects.get(email=serializer.validated_data['email'])
-    except Utilisateur.DoesNotExist:
+    utilisateur = trouver_utilisateur(serializer.validated_data['email'])
+    if not utilisateur:
         # Sécurité : ne pas révéler si l'email existe
+        return Response({"message": "Si cet email existe, un code a été envoyé."})
+
+    # Trace pour identifier l'origine des demandes non sollicitées
+    logger.warning("[RESET] Demande de code pour %s depuis l'IP %s", utilisateur.email, ip_client(request))
+
+    if not envoi_code_autorise(utilisateur, 'reset'):
+        # Même réponse, sans nouvel email : on ne révèle pas la limite
         return Response({"message": "Si cet email existe, un code a été envoyé."})
 
     code_obj = creer_code(utilisateur, 'reset')
@@ -297,6 +391,7 @@ def mot_de_passe_oublie(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([CodesAuthThrottle])
 def reinitialiser_mot_de_passe(request):
     """
     POST /auth/reinitialiser-mot-de-passe/
@@ -306,25 +401,16 @@ def reinitialiser_mot_de_passe(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
-    try:
-        utilisateur = Utilisateur.objects.get(email=serializer.validated_data['email'])
-    except Utilisateur.DoesNotExist:
+    utilisateur = trouver_utilisateur(serializer.validated_data['email'])
+    if not utilisateur:
         return Response({"error": "Utilisateur introuvable."}, status=404)
 
-    code_obj = (
-        CodeVerification.objects
-        .filter(utilisateur=utilisateur, type='reset', utilise=False)
-        .order_by('-cree_le')
-        .first()
-    )
-
-    if not code_obj or code_obj.code != serializer.validated_data['code'] or not code_obj.est_valide():
-        return Response({"error": "Code invalide ou expiré."}, status=400)
+    erreur = controler_code(utilisateur, 'reset', serializer.validated_data['code'], consommer=True)
+    if erreur:
+        return Response({"error": erreur}, status=400)
 
     utilisateur.set_password(serializer.validated_data['password'])
     utilisateur.save()
-    code_obj.utilise = True
-    code_obj.save()
 
     return Response({"message": "Mot de passe réinitialisé avec succès."})
 
@@ -367,7 +453,7 @@ def rechercher_utilisateur(request):
 
     try:
         if email or ('@' in value):
-            utilisateur = Utilisateur.objects.get(email=value)
+            utilisateur = Utilisateur.objects.get(email__iexact=value)
         else:
             utilisateur = Utilisateur.objects.get(telephone=value)
         return Response(RechercheUtilisateurSerializer(utilisateur).data)
@@ -752,7 +838,7 @@ def membres_boutique(request, boutique_id):
 
     try:
         if '@' in contact:
-            nouveau = Utilisateur.objects.get(email=contact)
+            nouveau = Utilisateur.objects.get(email__iexact=contact)
         else:
             nouveau = Utilisateur.objects.get(telephone=contact)
     except Utilisateur.DoesNotExist:
@@ -859,28 +945,109 @@ def mettre_a_jour_soldes(request, boutique_id):
 #  TRANSACTIONS
 # ══════════════════════════════════════════════════════════════════════════
 
-def _ajuster_soldes(boutique, type_tx, operateur, montant, sens=1):
+def _impact_soldes(type_tx, operateur, montant, sens=1):
     """
-    Applique (sens=1) ou annule (sens=-1) l'impact d'une transaction sur les
-    soldes Opérateur et Caisse.
-    Dépôt/Crédit : opérateur -montant, caisse +montant (sens=1)
-    Retrait      : caisse -montant, opérateur +montant (sens=1)
+    Retourne l'effet d'une transaction sur les soldes : {operateur: delta}.
+    Dépôt/Crédit : opérateur -montant, caisse +montant
+    Retrait      : caisse -montant, opérateur +montant
+    Dépense      : source (opérateur ou caisse) -montant
+    sens=-1 donne l'effet inverse (annulation).
     """
-    try:
-        solde_operateur = SoldeOperateur.objects.get(boutique=boutique, operateur=operateur)
-        solde_caisse = SoldeOperateur.objects.get(boutique=boutique, operateur='Caisse')
-    except SoldeOperateur.DoesNotExist:
-        return
-
+    m = sens * montant
     if type_tx in ('Depot', 'Credit'):
-        solde_operateur.montant -= sens * montant
-        solde_caisse.montant += sens * montant
-    elif type_tx == 'Retrait':
-        solde_caisse.montant -= sens * montant
-        solde_operateur.montant += sens * montant
+        return {operateur: -m, 'Caisse': m}
+    if type_tx == 'Retrait':
+        return {'Caisse': -m, operateur: m}
+    if type_tx == 'Depense':
+        return {operateur: -m}
+    return {}
 
-    solde_operateur.save()
-    solde_caisse.save()
+
+def _cumuler_impacts(*impacts):
+    total = {}
+    for impact in impacts:
+        for op, delta in impact.items():
+            total[op] = total.get(op, 0) + delta
+    return total
+
+
+def _fcfa(montant):
+    return f"{montant:,.0f}".replace(',', ' ') + " FCFA"
+
+
+def _appliquer_impact(boutique, impact):
+    """
+    Vérifie puis applique un impact sur les soldes (à appeler dans un bloc
+    atomique). Aucun solde ne peut devenir négatif : si c'est le cas, rien
+    n'est modifié et on retourne (message_erreur, None). Sinon on retourne
+    (None, soldes_avant) où soldes_avant = {operateur: montant} sert aux alertes.
+    """
+    soldes = {
+        s.operateur: s
+        for s in SoldeOperateur.objects.select_for_update().filter(
+            boutique=boutique, operateur__in=list(impact.keys()),
+        )
+    }
+    for op, delta in impact.items():
+        actuel = soldes[op].montant if op in soldes else 0
+        if delta < 0 and actuel + delta < 0:
+            return f"Solde {op} insuffisant (disponible : {_fcfa(actuel)}).", None
+
+    avant = {}
+    for op, delta in impact.items():
+        if not delta:
+            continue
+        solde = soldes.get(op) or SoldeOperateur.objects.create(boutique=boutique, operateur=op)
+        avant[op] = solde.montant
+        solde.montant += delta
+        solde.save()
+    return None, avant
+
+
+def _alerter(boutique, titre, message):
+    """Notifie tous les membres actifs de la boutique (propriétaire compris)."""
+    destinataires = Utilisateur.objects.filter(
+        memberships__boutique=boutique, memberships__actif=True,
+    ).distinct()
+    for utilisateur in destinataires:
+        creer_notification(utilisateur, 'alerte', titre, message, boutique=boutique)
+
+
+def _verifier_alertes(boutique, soldes_avant, transaction=None):
+    """
+    Alertes intelligentes :
+    - solde bas : un solde vient de passer sous le seuil de la boutique ;
+    - opération anormale : montant >= 3x la moyenne des 30 derniers jours
+      pour ce type d'opération (au moins 5 opérations de référence).
+    """
+    seuil = boutique.seuil_alerte_solde
+    if seuil and seuil > 0:
+        for solde in SoldeOperateur.objects.filter(boutique=boutique, operateur__in=list(soldes_avant.keys())):
+            if soldes_avant[solde.operateur] >= seuil > solde.montant:
+                _alerter(
+                    boutique,
+                    f"Solde {solde.operateur} bas",
+                    f"Le solde {solde.operateur} de {boutique.nom} est de {_fcfa(solde.montant)}, "
+                    f"sous le seuil d'alerte de {_fcfa(seuil)}.",
+                )
+
+    if transaction is None:
+        return
+    reference = Transaction.objects.filter(
+        boutique=boutique, type=transaction.type, archivee=False,
+        date__gte=timezone.now() - timedelta(days=30),
+    ).exclude(id=transaction.id)
+    if reference.count() < 5:
+        return
+    moyenne = reference.aggregate(m=Avg('montant'))['m'] or 0
+    if moyenne > 0 and transaction.montant >= 3 * moyenne:
+        _alerter(
+            boutique,
+            "Opération inhabituelle détectée",
+            f"{transaction.get_type_display()} {transaction.operateur} de {_fcfa(transaction.montant)}, "
+            f"soit {transaction.montant / moyenne:.1f}x la moyenne des 30 derniers jours "
+            f"({_fcfa(moyenne)}).",
+        )
 
 
 @api_view(['GET', 'POST'])
@@ -914,15 +1081,26 @@ def transactions_boutique(request, boutique_id):
             qs = qs.filter(type=type_tx)
         if operateur:
             qs = qs.filter(operateur=operateur)
-        if date_debut:
-            qs = qs.filter(date__date__gte=date_debut)
-        if date_fin:
-            qs = qs.filter(date__date__lte=date_fin)
+        # Bornes explicites dans le fuseau du Bénin : les lookups `date__date`
+        # ne renvoient rien sous MySQL sans tables de fuseaux horaires.
+        benin_tz = timezone.get_current_timezone()
+        try:
+            if date_debut:
+                start = timezone.make_aware(datetime.combine(date.fromisoformat(date_debut), time.min), benin_tz)
+                qs = qs.filter(date__gte=start)
+            if date_fin:
+                end = timezone.make_aware(
+                    datetime.combine(date.fromisoformat(date_fin) + timedelta(days=1), time.min), benin_tz,
+                )
+                qs = qs.filter(date__lt=end)
+        except ValueError:
+            return Response({"error": "Les dates doivent être au format AAAA-MM-JJ."}, status=400)
         if search:
             qs = qs.filter(
                 Q(numero_client__icontains=search) |
                 Q(nom_client__icontains=search) |
                 Q(reference__icontains=search) |
+                Q(motif__icontains=search) |
                 Q(operateur__icontains=search)
             )
 
@@ -933,17 +1111,22 @@ def transactions_boutique(request, boutique_id):
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
-    transaction = serializer.save(boutique=boutique, effectuee_par=request.user)
+    v = serializer.validated_data
+    with db_transaction.atomic():
+        erreur, soldes_avant = _appliquer_impact(
+            boutique, _impact_soldes(v['type'], v['operateur'], v['montant']),
+        )
+        if erreur:
+            return Response({"error": erreur}, status=400)
+        transaction = serializer.save(boutique=boutique, effectuee_par=request.user)
+
     creer_notification(
         utilisateur=request.user,
-        type_notif='depot' if transaction.type == 'Depot'
-                   else 'retrait' if transaction.type == 'Retrait'
-                   else 'credit',
-        titre=f"Une opération de {transaction.type.lower()} a été effectuée",
+        type_notif={'Depot': 'depot', 'Retrait': 'retrait', 'Depense': 'depense'}.get(transaction.type, 'credit'),
+        titre=f"Une opération de {transaction.get_type_display().lower()} a été effectuée",
         boutique=boutique,
     )
-
-    _ajuster_soldes(boutique, transaction.type, transaction.operateur, transaction.montant, sens=1)
+    _verifier_alertes(boutique, soldes_avant, transaction)
 
     return Response(TransactionSerializer(transaction).data, status=201)
 
@@ -975,13 +1158,17 @@ def detail_transaction(request, boutique_id, transaction_id):
         if 'archivee' in request.data:
             archivee = bool(request.data['archivee'])
             if transaction.archivee != archivee:
-                _ajuster_soldes(
-                    boutique, transaction.type, transaction.operateur, transaction.montant,
-                    sens=-1 if archivee else 1,
-                )
-                transaction.archivee = archivee
-                transaction.archivee_le = timezone.now() if archivee else None
-                transaction.save(update_fields=['archivee', 'archivee_le', 'mis_a_jour'])
+                with db_transaction.atomic():
+                    erreur, soldes_avant = _appliquer_impact(boutique, _impact_soldes(
+                        transaction.type, transaction.operateur, transaction.montant,
+                        sens=-1 if archivee else 1,
+                    ))
+                    if erreur:
+                        return Response({"error": erreur}, status=400)
+                    transaction.archivee = archivee
+                    transaction.archivee_le = timezone.now() if archivee else None
+                    transaction.save(update_fields=['archivee', 'archivee_le', 'mis_a_jour'])
+                _verifier_alertes(boutique, soldes_avant)
                 creer_notification(
                     utilisateur=request.user,
                     type_notif='modification',
@@ -1001,19 +1188,29 @@ def detail_transaction(request, boutique_id, transaction_id):
 
         serializer = TransactionSerializer(transaction, data=request.data, partial=True)
         if serializer.is_valid():
-            serializer.save()
-
+            v = serializer.validated_data
             # Annuler l'ancien impact puis appliquer le nouveau (gère aussi
             # le cas où le type/l'opérateur/le montant ont changé).
-            _ajuster_soldes(boutique, ancien_type, ancien_operateur, ancien_montant, sens=-1)
-            _ajuster_soldes(boutique, transaction.type, transaction.operateur, transaction.montant, sens=1)
+            impact = _cumuler_impacts(
+                _impact_soldes(ancien_type, ancien_operateur, ancien_montant, sens=-1),
+                _impact_soldes(
+                    v.get('type', ancien_type), v.get('operateur', ancien_operateur),
+                    v.get('montant', ancien_montant),
+                ),
+            )
+            with db_transaction.atomic():
+                erreur, soldes_avant = _appliquer_impact(boutique, impact)
+                if erreur:
+                    return Response({"error": erreur}, status=400)
+                serializer.save()
+            _verifier_alertes(boutique, soldes_avant)
 
             creer_notification(
                 utilisateur=request.user,
                 type_notif='modification',
                 titre=f"Une modification a été effectuée sur une opération d'achat de crédit / Forfait"
                     if transaction.type == 'Credit'
-                    else f"Modification d'une opération de {transaction.type.lower()}",
+                    else f"Modification d'une opération de {transaction.get_type_display().lower()}",
                 boutique=boutique,
             )
             return Response(serializer.data)
@@ -1058,12 +1255,13 @@ def rapport_journalier(request, boutique_id):
         total_depots=Sum('montant', filter=Q(type='Depot')),
         total_retraits=Sum('montant', filter=Q(type='Retrait')),
         total_credits=Sum('montant', filter=Q(type='Credit')),
-     
+        total_depenses=Sum('montant', filter=Q(type='Depense')),
     )
 
     total_depots     = totaux['total_depots']     or 0
     total_retraits   = totaux['total_retraits']   or 0
     total_credits    = totaux['total_credits']    or 0
+    total_depenses   = totaux['total_depenses']   or 0
 
     return Response({
         "date": selected_date.isoformat(),
@@ -1071,6 +1269,7 @@ def rapport_journalier(request, boutique_id):
         "total_depots": total_depots,
         "total_retraits": total_retraits,
         "total_credits": total_credits,
+        "total_depenses": total_depenses,
     })
 
 

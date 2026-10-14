@@ -66,6 +66,7 @@ class CodeVerification(models.Model):
     type        = models.CharField(max_length=10, choices=TYPE_CHOICES)
     expire_le   = models.DateTimeField()
     utilise     = models.BooleanField(default=False)
+    tentatives  = models.PositiveSmallIntegerField(default=0)  # saisies erronées
     cree_le     = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -146,6 +147,8 @@ class Boutique(models.Model):
     latitude     = models.FloatField(null=True, blank=True)
     longitude    = models.FloatField(null=True, blank=True)
     active       = models.BooleanField(default=True)
+    # Alerte « solde bas » : notifiée quand un solde passe sous ce seuil
+    seuil_alerte_solde = models.DecimalField(max_digits=14, decimal_places=2, default=10000)
     cree_le      = models.DateTimeField(auto_now_add=True)
     mis_a_jour   = models.DateTimeField(auto_now=True)
 
@@ -204,11 +207,13 @@ class Transaction(models.Model):
         ('Depot',   'Dépôt'),
         ('Retrait', 'Retrait'),
         ('Credit',  'Achat de crédit/forfait'),
+        ('Depense', 'Dépense'),
     ]
     OPERATEUR_CHOICES = [
         ('MTN',     'MTN'),
         ('Moov',    'Moov'),
         ('Celtiis', 'Celtiis'),
+        ('Caisse',  'Caisse'),   # uniquement pour les dépenses payées en espèces
     ]
     TYPE_CREDIT_CHOICES = [
         ('Credit',  'Crédit'),
@@ -222,10 +227,16 @@ class Transaction(models.Model):
     operateur      = models.CharField(max_length=20, choices=OPERATEUR_CHOICES)
     montant        = models.DecimalField(max_digits=14, decimal_places=2)
     commission     = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    numero_client  = models.CharField(max_length=30)
+    numero_client  = models.CharField(max_length=30, blank=True)
     nom_client     = models.CharField(max_length=200, blank=True)
     reference      = models.CharField(max_length=100, blank=True)
     remarque       = models.TextField(blank=True)
+    # Champ spécifique Dépense
+    motif          = models.CharField(max_length=255, blank=True)
+    # Dépôt / Crédit : espèces reçues et monnaie rendue au client.
+    # Purement informatif : n'intervient dans aucun calcul de solde.
+    montant_remis  = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    monnaie_rendue = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     # Champ spécifique Crédit
     type_credit    = models.CharField(max_length=10, choices=TYPE_CREDIT_CHOICES, blank=True)
     date           = models.DateTimeField(default=timezone.now)
@@ -301,6 +312,8 @@ class Notification(models.Model):
         ('retrait',      'Retrait effectué'),
         ('depot',        'Dépôt effectué'),
         ('credit',       'Achat de crédit'),
+        ('depense',      'Dépense effectuée'),
+        ('alerte',       'Alerte'),
         ('export',       'Export PDF'),
         ('info',         'Information'),
     ]

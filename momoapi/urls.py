@@ -9,6 +9,7 @@ urlpatterns = [
     path('auth/connexion/',                    views.connexion,                      name='connexion'),
     path('auth/token/refresh/',                TokenRefreshView.as_view(),           name='token_refresh'),
     path('auth/verifier-code/',                views.verifier_code,                  name='verifier_code'),
+    path('auth/renvoyer-code/',                views.renvoyer_code_verification,     name='renvoyer_code_verification'),
     path('auth/mot-de-passe-oublie/',          views.mot_de_passe_oublie,            name='mot_de_passe_oublie'),
     path('auth/reinitialiser-mot-de-passe/',   views.reinitialiser_mot_de_passe,     name='reinitialiser_mot_de_passe'),
     path('auth/profil/',                       views.profil,                         name='profil'),

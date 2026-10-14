@@ -7,13 +7,28 @@ from .models import *
 # AUTH
 # ══════════════════════════════════════════════════════════════════════
 
+class EmailNormaliseField(serializers.EmailField):
+    """Email sans espaces et en minuscules : « Jean@Mail.com » = « jean@mail.com »."""
+    def to_internal_value(self, data):
+        return super().to_internal_value(str(data).strip()).lower()
+
+
 class InscriptionSerializer(serializers.ModelSerializer):
+    email     = EmailNormaliseField()
     password  = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True)
 
     class Meta:
         model  = Utilisateur
         fields = ['email', 'nom', 'prenom', 'telephone', 'password', 'password2']
+
+    def validate_email(self, value):
+        if Utilisateur.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError(
+                "Un compte existe déjà avec cet email. Connectez-vous : si le compte "
+                "n'est pas encore vérifié, un nouveau code vous sera envoyé."
+            )
+        return value
 
     def validate(self, data):
         if data['password'] != data['password2']:
@@ -26,22 +41,22 @@ class InscriptionSerializer(serializers.ModelSerializer):
 
 
 class ConnexionSerializer(serializers.Serializer):
-    email    = serializers.EmailField()
+    email    = EmailNormaliseField()
     password = serializers.CharField(write_only=True)
 
 
 class VerificationCodeSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = EmailNormaliseField()
     code  = serializers.CharField(max_length=6)
     type  = serializers.ChoiceField(choices=['email', 'reset'])
 
 
 class MotDePasseOublieSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = EmailNormaliseField()
 
 
 class ReinitialisationMotDePasseSerializer(serializers.Serializer):
-    email     = serializers.EmailField()
+    email     = EmailNormaliseField()
     code      = serializers.CharField(max_length=6)
     password  = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True)
@@ -112,10 +127,12 @@ class BoutiqueSerializer(serializers.ModelSerializer):
         model  = Boutique
         fields = [
             'id', 'nom', 'couleur', 'devise', 'adresse',
-            'latitude', 'longitude', 'active',
+            'latitude', 'longitude', 'active', 'seuil_alerte_solde',
             'proprietaire', 'proprietaire_nom', 'cree_le',
         ]
         read_only_fields = ['id', 'proprietaire', 'cree_le']
+        # 0 désactive l'alerte « solde bas »
+        extra_kwargs = {'seuil_alerte_solde': {'min_value': 0}}
 
     def get_proprietaire_nom(self, obj):
         return f"{obj.proprietaire.prenom} {obj.proprietaire.nom}"
@@ -163,10 +180,11 @@ class SoldeOperateurSerializer(serializers.ModelSerializer):
 
 class MiseAJourSoldesSerializer(serializers.Serializer):
     """Payload : {"MTN": 50000, "Moov": 20000, ...}"""
-    MTN     = serializers.DecimalField(max_digits=14, decimal_places=2, required=False)
-    Moov    = serializers.DecimalField(max_digits=14, decimal_places=2, required=False)
-    Celtiis = serializers.DecimalField(max_digits=14, decimal_places=2, required=False)
-    Caisse  = serializers.DecimalField(max_digits=14, decimal_places=2, required=False)
+    # Un solde ne peut jamais être négatif
+    MTN     = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, min_value=0)
+    Moov    = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, min_value=0)
+    Celtiis = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, min_value=0)
+    Caisse  = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, min_value=0)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -181,21 +199,51 @@ class TransactionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'type', 'operateur', 'montant', 'commission',
             'numero_client', 'nom_client', 'reference', 'remarque',
-            'type_credit', 'date',
+            'motif', 'montant_remis', 'monnaie_rendue', 'type_credit', 'date',
             'archivee', 'archivee_le',
             'effectuee_par', 'effectuee_par_nom',
             'boutique', 'cree_le',
         ]
         read_only_fields = ['id', 'boutique', 'effectuee_par', 'cree_le', 'archivee_le']
+        extra_kwargs = {
+            'montant_remis':  {'min_value': 0},
+            'monnaie_rendue': {'min_value': 0},
+        }
 
     def get_effectuee_par_nom(self, obj):
         if obj.effectuee_par:
             return f"{obj.effectuee_par.prenom} {obj.effectuee_par.nom}"
         return None
 
+    def validate_montant(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Le montant doit être supérieur à 0.")
+        return value
+
     def validate(self, data):
-        if data.get('type') == 'Credit' and not data.get('type_credit'):
+        # En PATCH partiel, compléter avec les valeurs actuelles de l'instance
+        def champ(nom):
+            if nom in data:
+                return data[nom]
+            return getattr(self.instance, nom, None) if self.instance else None
+
+        type_tx = champ('type')
+        if type_tx == 'Credit' and not champ('type_credit'):
             raise serializers.ValidationError({"type_credit": "Requis pour un achat de crédit/forfait."})
+
+        # Montant remis / monnaie rendue : uniquement pour Dépôt et Crédit
+        if type_tx not in ('Depot', 'Credit'):
+            data['montant_remis'] = None
+            data['monnaie_rendue'] = None
+
+        if type_tx == 'Depense':
+            if not (champ('motif') or '').strip():
+                raise serializers.ValidationError({"motif": "Le motif de la dépense est requis."})
+        else:
+            if champ('operateur') == 'Caisse':
+                raise serializers.ValidationError({"operateur": "Opérateur invalide pour ce type d'opération."})
+            if not (champ('numero_client') or '').strip():
+                raise serializers.ValidationError({"numero_client": "Le numéro du client est requis."})
         return data
 
 
