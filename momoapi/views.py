@@ -30,8 +30,20 @@ logger = logging.getLogger(__name__)
 
 
 class CodesAuthThrottle(AnonRateThrottle):
-    # Limite par IP les endpoints publics liés aux codes envoyés par email
+    # Limite par IP les endpoints publics liés aux codes envoyés par email.
+    # Le taux est fixé ici (et non dans settings.REST_FRAMEWORK) pour ne pas
+    # dépendre de la configuration du serveur.
     scope = 'codes_auth'
+    rate = '30/hour'
+
+    def allow_request(self, request, view):
+        # Un problème de cache ne doit jamais bloquer l'inscription ou la
+        # vérification : les limites par compte (en base) restent actives.
+        try:
+            return super().allow_request(request, view)
+        except Exception:
+            logger.exception("[THROTTLE] Limitation par IP indisponible")
+            return True
 
 
 def _verifier_acces_boutique(boutique, utilisateur):

@@ -88,10 +88,6 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
-    # Limite par IP des endpoints publics d'envoi / vérification de codes
-    'DEFAULT_THROTTLE_RATES': {
-        'codes_auth': '30/hour',
-    },
 }
 
 # ── Simple JWT ────────────────────────────────────────────────────────────
