@@ -1,4 +1,5 @@
 {% extends 'dashboard/base.html' %}
+{% load momo %}
 {% block title %}Tableau de bord{% endblock %}
 {% block header_title %}Tableau de bord{% endblock %}
 {% block breadcrumb %}Vue d'ensemble{% endblock %}
@@ -181,18 +182,12 @@
         {% for tx in dernieres_tx %}
         <tr>
           <td>
-            {% if tx.type == 'Depot' %}
-              <span class="badge badge-green">↑ Dépôt</span>
-            {% elif tx.type == 'Retrait' %}
-              <span class="badge badge-red">↓ Retrait</span>
-            {% else %}
-              <span class="badge badge-blue">◈ Crédit</span>
-            {% endif %}
+            {{ tx|type_badge }}
           </td>
           <td>
             <a href="{% url 'dashboard:boutique_detail' tx.boutique.id %}" class="link">{{ tx.boutique.nom }}</a>
           </td>
-          <td><span class="badge badge-gray">{{ tx.operateur }}</span></td>
+          <td>{{ tx|source_badge }}</td>
           <td class="td-main">{{ tx.montant|floatformat:0 }} XOF</td>
           <td style="color:var(--green)">+{{ tx.commission|floatformat:0 }}</td>
           <td style="color:var(--text2)">

@@ -1,4 +1,5 @@
 {% extends 'dashboard/base.html' %}
+{% load momo %}
 {% block title %}Transaction #{{ tx.id }}{% endblock %}
 {% block header_title %}Détail transaction{% endblock %}
 {% block breadcrumb %}Transactions › {{ tx.id }}{% endblock %}
@@ -72,12 +73,13 @@
             </td>
           </tr>
           <tr>
+            <td style="color:var(--text3);font-size:12px;padding:7px 0">SIM</td>
+            <td>{% if tx.sim %}{{ tx.sim.nom }}{% if tx.sim.numero %} <span style="color:var(--text3)">({{ tx.sim.numero }})</span>{% endif %}{% else %}—{% endif %}</td>
+          </tr>
+          <tr>
             <td style="color:var(--text3);font-size:12px;padding:7px 0">Type</td>
             <td>
-              {% if tx.type == 'Depot' %}<span class="badge badge-green">↑ Dépôt</span>
-              {% elif tx.type == 'Retrait' %}<span class="badge badge-red">↓ Retrait</span>
-              {% else %}<span class="badge badge-blue">◈ Crédit</span>
-              {% endif %}
+              {{ tx|type_badge }}
             </td>
           </tr>
           <tr>
@@ -139,56 +141,22 @@
   <div class="panel-header"><div class="panel-title">Impact sur les comptes</div></div>
   <div class="panel-body">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
-      <!-- Impact Opérateur -->
       <div style="padding:16px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">
         <div style="font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:12px;letter-spacing:0.5px">
-          Compte Opérateur
+          SIM {% if tx.sim %}— {{ tx.operateur }} · {{ tx.sim.nom }}{% endif %}
         </div>
-        <div style="display:flex;align-items:baseline;gap:8px">
-          {% if tx.type == 'Retrait' %}
-          <span style="font-size:32px;font-weight:700;color:var(--green)">↑</span>
-          <div style="font-size:24px;font-weight:700;color:var(--green)">+{{ tx.montant|floatformat:0 }}</div>
-          {% elif tx.type in 'Depot,Credit' %}
-          <span style="font-size:32px;font-weight:700;color:var(--red)">↓</span>
-          <div style="font-size:24px;font-weight:700;color:var(--red)">-{{ tx.montant|floatformat:0 }}</div>
-          {% endif %}
-          <span style="font-size:14px;color:var(--text3)">XOF</span>
-        </div>
-        <div style="margin-top:8px;font-size:12px;color:var(--text2);line-height:1.5">
-          {% if tx.type == 'Retrait' %}
-          Argent retiré de la caisse et versé à l'opérateur
-          {% elif tx.type == 'Depot' %}
-          Dépôt reçu du client via l'opérateur, l'opérateur perd l'argent
-          {% else %}
-          Crédit forfaitaire l'opérateur perd l'argent
-          {% endif %}
-        </div>
+        <div style="font-size:24px;font-weight:700">{{ tx|impact:"sim" }} <span style="font-size:14px;color:var(--text3)">XOF</span></div>
       </div>
-
-      <!-- Impact Caisse -->
       <div style="padding:16px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">
         <div style="font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:12px;letter-spacing:0.5px">
-          Compte Caisse
+          Caisse
         </div>
-        <div style="display:flex;align-items:baseline;gap:8px">
-          {% if tx.type in 'Depot,Credit' %}
-          <span style="font-size:32px;font-weight:700;color:var(--green)">↑</span>
-          <div style="font-size:24px;font-weight:700;color:var(--green)">+{{ tx.montant|floatformat:0 }}</div>
-          {% elif tx.type == 'Retrait' %}
-          <span style="font-size:32px;font-weight:700;color:var(--red)">↓</span>
-          <div style="font-size:24px;font-weight:700;color:var(--red)">-{{ tx.montant|floatformat:0 }}</div>
-          {% endif %}
-          <span style="font-size:14px;color:var(--text3)">XOF</span>
-        </div>
-        <div style="margin-top:8px;font-size:12px;color:var(--text2);line-height:1.5">
-          {% if tx.type in 'Depot,Credit' %}
-          Argent collecté en caisse (client payé)
-          {% else %}
-          Argent versé au client depuis la caisse
-          {% endif %}
-        </div>
+        <div style="font-size:24px;font-weight:700">{{ tx|impact:"caisse" }} <span style="font-size:14px;color:var(--text3)">XOF</span></div>
       </div>
     </div>
+    {% if tx.archivee %}
+    <div style="margin-top:12px;font-size:12px;color:var(--amber)">Opération archivée : son impact a été annulé sur les soldes.</div>
+    {% endif %}
   </div>
 </div>
 

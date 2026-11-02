@@ -1,4 +1,5 @@
  {% extends 'dashboard/base.html' %}
+{% load momo %}
 {% block title %}{{ boutique.nom }}{% endblock %}
 {% block header_title %}Détail boutique{% endblock %}
 {% block breadcrumb %}Boutiques › {{ boutique.nom }}{% endblock %}
@@ -104,28 +105,42 @@
 
   <!-- Soldes -->
   <div class="panel">
-    <div class="panel-header"><div class="panel-title">Soldes par opérateur</div></div>
+    <div class="panel-header">
+      <div class="panel-title">Soldes par SIM</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:700">{{ total_soldes|floatformat:0 }} XOF</div>
+    </div>
     <div class="panel-body">
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.5">
-        Le système de soldes fonctionne avec <strong>2 comptes</strong> :<br>
-        • <strong>Compte Opérateur</strong> : argent disponible auprès de l'opérateur<br>
-        • <strong>Compte Caisse</strong> : argent en caisse (collecté des clients)
+        Chaque SIM d'opération a son propre solde. Un dépôt ou un achat de crédit
+        débite la SIM choisie et crédite la <strong>Caisse</strong> ; un retrait fait l'inverse.
       </div>
-      {% for s in soldes %}
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:34px;height:34px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px">
-            {% if s.operateur == 'MTN' %}🟡{% elif s.operateur == 'Moov' %}🟢{% elif s.operateur == 'Celtiis' %}🔵{% else %}💼{% endif %}
-          </div>
-          <div class="td-main">{{ s.operateur }}</div>
+      {% for groupe in soldes_par_operateur %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0 6px">
+        <div class="td-main">{{ groupe.operateur|emoji_operateur }} {{ groupe.operateur }}
+          <span style="font-size:11px;color:var(--text3);font-weight:400">· {{ groupe.sims|length }} SIM</span>
         </div>
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--text)">
-          {{ s.montant|floatformat:0 }} <span style="font-size:11px;color:var(--text3);font-weight:400">XOF</span>
+        <div style="font-weight:700">{{ groupe.total|floatformat:0 }} XOF</div>
+      </div>
+      {% for sim in groupe.sims %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 6px 28px;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-size:13px">{{ sim.nom }}</div>
+          <div style="font-size:11px;color:var(--text3)">{{ sim.numero|default:"Numéro non renseigné" }}</div>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-weight:600">
+          {{ sim.solde|floatformat:0 }} <span style="font-size:11px;color:var(--text3);font-weight:400">XOF</span>
         </div>
       </div>
       {% empty %}
-      <div class="empty">Aucun solde enregistré</div>
+      <div style="padding:4px 0 8px 28px;font-size:12px;color:var(--text3);border-bottom:1px solid var(--border)">Aucune SIM</div>
       {% endfor %}
+      {% endfor %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0">
+        <div class="td-main">💼 Caisse</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px">
+          {{ caisse|floatformat:0 }} <span style="font-size:11px;color:var(--text3);font-weight:400">XOF</span>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -179,34 +194,20 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Type</th><th>Opérateur</th><th>Montant</th><th style="text-align:center">Impact Opérateur</th><th style="text-align:center">Impact Caisse</th><th>Client</th><th>Par</th><th>Date</th></tr>
+        <tr><th>Type</th><th>Opérateur</th><th>Montant</th><th style="text-align:center">Impact SIM</th><th style="text-align:center">Impact Caisse</th><th>Client</th><th>Par</th><th>Date</th></tr>
       </thead>
       <tbody>
         {% for tx in transactions %}
         <tr style="cursor:pointer" onclick="window.location='{% url 'dashboard:transaction_detail' tx.id %}'">
           <td>
-            {% if tx.type == 'Depot' %}<span class="badge badge-green">↑ Dépôt</span>
-            {% elif tx.type == 'Retrait' %}<span class="badge badge-red">↓ Retrait</span>
-            {% else %}<span class="badge badge-blue">◈ Crédit</span>{% endif %}
+            {{ tx|type_badge }}
           </td>
-          <td><span class="badge badge-gray">{{ tx.operateur }}</span></td>
+          <td>{{ tx|source_badge }}</td>
           <td class="td-main">{{ tx.montant|floatformat:0 }} XOF</td>
-          <!-- Impact Opérateur -->
-          <td style="text-align:center">
-            {% if tx.type == 'Retrait' %}
-            <span style="color:var(--green);font-weight:600">↑ +{{ tx.montant|floatformat:0 }}</span>
-            {% elif tx.type in 'Depot,Credit' %}
-            <span style="color:var(--red);font-weight:600">↓ -{{ tx.montant|floatformat:0 }}</span>
-            {% endif %}
-          </td>
+          <!-- Impact SIM -->
+          <td style="text-align:center">{{ tx|impact:"sim" }}</td>
           <!-- Impact Caisse -->
-          <td style="text-align:center">
-            {% if tx.type in 'Depot,Credit' %}
-            <span style="color:var(--green);font-weight:600">↑ +{{ tx.montant|floatformat:0 }}</span>
-            {% elif tx.type == 'Retrait' %}
-            <span style="color:var(--red);font-weight:600">↓ -{{ tx.montant|floatformat:0 }}</span>
-            {% endif %}
-          </td>
+          <td style="text-align:center">{{ tx|impact:"caisse" }}</td>
           <td style="font-size:12px">{{ tx.nom_client|default:tx.numero_client }}</td>
           <td style="font-size:12px;color:var(--text2)">
             {% if tx.effectuee_par %}{{ tx.effectuee_par.prenom }}{% else %}—{% endif %}

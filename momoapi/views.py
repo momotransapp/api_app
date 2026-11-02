@@ -734,9 +734,9 @@ def mes_boutiques(request):
  
     boutique = serializer.save(proprietaire=request.user)
  
-    # Créer les soldes par défaut (MTN, Moov, Celtiis, Caisse)
-    for op in ['MTN', 'Moov', 'Celtiis', 'Caisse']:
-        SoldeOperateur.objects.get_or_create(boutique=boutique, operateur=op)
+    # Solde Caisse (espèces). Les SIM MTN / Moov / Celtiis sont ajoutées
+    # ensuite depuis l'app, chacune avec son propre solde.
+    SoldeOperateur.objects.get_or_create(boutique=boutique, operateur='Caisse')
  
     # Ajouter le propriétaire comme membre (rôle propriétaire, ne peut pas être retiré)
     MembreBoutique.objects.create(
@@ -906,80 +906,212 @@ def retirer_membre(request, boutique_id, membre_id):
 #  SOLDES
 # ══════════════════════════════════════════════════════════════════════════
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, EstVerifie])
-def soldes_boutique(request, boutique_id):
-    """GET /boutiques/<boutique_id>/soldes/"""
+OPERATEURS_SIM = ('MTN', 'Moov', 'Celtiis')
+
+
+def _boutique_accessible(request, boutique_id):
+    """Retourne (boutique, None) ou (None, Response d'erreur)."""
     try:
         boutique = Boutique.objects.get(id=boutique_id)
     except Boutique.DoesNotExist:
-        return Response({"error": "Boutique introuvable."}, status=404)
-
+        return None, Response({"error": "Boutique introuvable."}, status=404)
     ok, msg = _verifier_acces_boutique(boutique, request.user)
     if not ok:
-        return Response({"error": msg}, status=403)
+        return None, Response({"error": msg}, status=403)
+    return boutique, None
 
-    soldes = SoldeOperateur.objects.filter(boutique=boutique)
-    return Response(SoldeOperateurSerializer(soldes, many=True).data)
+
+def _peut_gerer_sims(boutique, utilisateur):
+    """Ajout / retrait de SIM : propriétaire ou administrateur de la boutique."""
+    return MembreBoutique.objects.filter(
+        boutique=boutique, utilisateur=utilisateur, actif=True,
+        role__in=('proprietaire', 'admin'),
+    ).exists()
+
+
+def _caisse(boutique, verrou=False):
+    qs = SoldeOperateur.objects.select_for_update() if verrou else SoldeOperateur.objects
+    caisse, _ = qs.get_or_create(boutique=boutique, operateur='Caisse')
+    return caisse
+
+
+def _soldes_par_operateur(boutique):
+    """Soldes agrégés : somme des SIM actives par opérateur, plus la Caisse."""
+    totaux = {
+        ligne['operateur']: ligne['total']
+        for ligne in Sim.objects.filter(boutique=boutique, active=True)
+        .values('operateur').annotate(total=Sum('solde'))
+    }
+    soldes = [{"operateur": op, "montant": totaux.get(op) or 0} for op in OPERATEURS_SIM]
+    soldes.append({"operateur": "Caisse", "montant": _caisse(boutique).montant})
+    return soldes
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, EstVerifie])
+def soldes_boutique(request, boutique_id):
+    """
+    GET /boutiques/<boutique_id>/soldes/
+    Soldes par opérateur (somme de ses SIM) et Caisse. Le détail par SIM est
+    sur /boutiques/<boutique_id>/sims/.
+    """
+    boutique, erreur = _boutique_accessible(request, boutique_id)
+    if erreur:
+        return erreur
+    return Response(_soldes_par_operateur(boutique))
 
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, EstVerifie])
 def mettre_a_jour_soldes(request, boutique_id):
     """
-    PATCH /boutiques/<boutique_id>/soldes/
-    {"MTN": 50000, "Moov": 20000, "Caisse": 10000}
+    PATCH /boutiques/<boutique_id>/soldes/mise-a-jour/
+    {"Caisse": 10000}
+    Les soldes des SIM se modifient sur /sims/<sim_id>/. Pour les anciennes
+    versions de l'app, {"MTN": 50000} reste accepté si la boutique n'a
+    qu'une seule SIM MTN.
     """
-    try:
-        boutique = Boutique.objects.get(id=boutique_id)
-    except Boutique.DoesNotExist:
-        return Response({"error": "Boutique introuvable."}, status=404)
-
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    boutique, erreur = _boutique_accessible(request, boutique_id)
+    if erreur:
+        return erreur
 
     serializer = MiseAJourSoldesSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
-    updated = []
-    for operateur, montant in serializer.validated_data.items():
-        solde, _ = SoldeOperateur.objects.get_or_create(boutique=boutique, operateur=operateur)
-        solde.montant = montant
-        solde.save()
-        updated.append(SoldeOperateurSerializer(solde).data)
+    with db_transaction.atomic():
+        for operateur, montant in serializer.validated_data.items():
+            if operateur == 'Caisse':
+                caisse = _caisse(boutique, verrou=True)
+                caisse.montant = montant
+                caisse.save()
+                continue
+            sims = list(Sim.objects.select_for_update().filter(boutique=boutique, operateur=operateur, active=True))
+            if len(sims) > 1:
+                return Response({
+                    "error": f"Vous avez plusieurs SIM {operateur} : mettez à jour l'application "
+                             f"pour modifier le solde de chaque SIM."
+                }, status=400)
+            if sims:
+                sims[0].solde = montant
+                sims[0].save()
+            elif montant:
+                Sim.objects.create(boutique=boutique, operateur=operateur, nom=f"SIM {operateur}", solde=montant)
 
-    return Response(updated)
+    return Response(_soldes_par_operateur(boutique))
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, EstVerifie])
+def sims_boutique(request, boutique_id):
+    """
+    GET  /boutiques/<boutique_id>/sims/  → SIM actives de la boutique
+    POST /boutiques/<boutique_id>/sims/  → ajouter une SIM (propriétaire / admin)
+         {"operateur": "MTN", "nom": "SIM dépôt", "numero": "+2290197426830", "solde": 0}
+    """
+    boutique, erreur = _boutique_accessible(request, boutique_id)
+    if erreur:
+        return erreur
+
+    if request.method == 'GET':
+        sims = Sim.objects.filter(boutique=boutique, active=True)
+        return Response(SimSerializer(sims, many=True).data)
+
+    if not _peut_gerer_sims(boutique, request.user):
+        return Response({"error": "Seuls le propriétaire et les administrateurs peuvent ajouter une SIM."}, status=403)
+
+    serializer = SimSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+    sim = serializer.save(boutique=boutique)
+    creer_notification(
+        utilisateur=request.user, type_notif='info',
+        titre=f"SIM ajoutée : {sim.libelle}", boutique=boutique,
+    )
+    return Response(SimSerializer(sim).data, status=201)
+
+
+@api_view(['PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated, EstVerifie])
+def detail_sim(request, boutique_id, sim_id):
+    """
+    PATCH  /boutiques/<boutique_id>/sims/<sim_id>/  {"solde": 50000} ou {"nom": …, "numero": …}
+    DELETE /boutiques/<boutique_id>/sims/<sim_id>/  → retire la SIM (solde à 0 requis)
+    """
+    boutique, erreur = _boutique_accessible(request, boutique_id)
+    if erreur:
+        return erreur
+    try:
+        sim = Sim.objects.get(id=sim_id, boutique=boutique, active=True)
+    except Sim.DoesNotExist:
+        return Response({"error": "SIM introuvable."}, status=404)
+
+    if request.method == 'DELETE':
+        if not _peut_gerer_sims(boutique, request.user):
+            return Response({"error": "Seuls le propriétaire et les administrateurs peuvent retirer une SIM."}, status=403)
+        if sim.solde != 0:
+            return Response({"error": "Mettez le solde de la SIM à 0 avant de la retirer."}, status=400)
+        # Désactivation : l'historique des opérations garde sa SIM
+        sim.active = False
+        sim.save(update_fields=['active', 'mis_a_jour'])
+        return Response({"message": "SIM retirée."})
+
+    # Renommer une SIM est réservé aux gestionnaires ; tout membre peut
+    # mettre à jour le solde (comme pour la Caisse).
+    if ({'nom', 'numero'} & set(request.data.keys())) and not _peut_gerer_sims(boutique, request.user):
+        return Response({"error": "Seuls le propriétaire et les administrateurs peuvent modifier une SIM."}, status=403)
+
+    serializer = SimSerializer(sim, data=request.data, partial=True)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+    serializer.save()
+    return Response(serializer.data)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 #  TRANSACTIONS
 # ══════════════════════════════════════════════════════════════════════════
 
-def _impact_soldes(type_tx, operateur, montant, sens=1):
+def _cle_source(sim_id, operateur):
+    """Compte touché par une opération : « sim:<id> » ou « Caisse »."""
+    if sim_id:
+        return f"sim:{sim_id}"
+    if operateur == 'Caisse':
+        return 'Caisse'
+    return None  # ancienne opération sans SIM : pas d'effet côté opérateur
+
+
+def _impact_soldes(type_tx, source, montant, sens=1):
     """
-    Retourne l'effet d'une transaction sur les soldes : {operateur: delta}.
-    Dépôt/Crédit : opérateur -montant, caisse +montant
-    Retrait      : caisse -montant, opérateur +montant
-    Dépense      : source (opérateur ou caisse) -montant
+    Effet d'une opération sur les soldes : {compte: delta}.
+    Dépôt/Crédit : SIM -montant, Caisse +montant
+    Retrait      : Caisse -montant, SIM +montant
+    Dépense      : source (SIM ou Caisse) -montant
     sens=-1 donne l'effet inverse (annulation).
     """
     m = sens * montant
+    impact = {}
+
+    def ajouter(cle, delta):
+        if cle:
+            impact[cle] = impact.get(cle, 0) + delta
+
     if type_tx in ('Depot', 'Credit'):
-        return {operateur: -m, 'Caisse': m}
-    if type_tx == 'Retrait':
-        return {'Caisse': -m, operateur: m}
-    if type_tx == 'Depense':
-        return {operateur: -m}
-    return {}
+        ajouter(source, -m)
+        ajouter('Caisse', m)
+    elif type_tx == 'Retrait':
+        ajouter('Caisse', -m)
+        ajouter(source, m)
+    elif type_tx == 'Depense':
+        ajouter(source, -m)
+    return impact
 
 
 def _cumuler_impacts(*impacts):
     total = {}
     for impact in impacts:
-        for op, delta in impact.items():
-            total[op] = total.get(op, 0) + delta
+        for cle, delta in impact.items():
+            total[cle] = total.get(cle, 0) + delta
     return total
 
 
@@ -989,31 +1121,64 @@ def _fcfa(montant):
 
 def _appliquer_impact(boutique, impact):
     """
-    Vérifie puis applique un impact sur les soldes (à appeler dans un bloc
-    atomique). Aucun solde ne peut devenir négatif : si c'est le cas, rien
-    n'est modifié et on retourne (message_erreur, None). Sinon on retourne
-    (None, soldes_avant) où soldes_avant = {operateur: montant} sert aux alertes.
+    Vérifie puis applique un impact sur les soldes (dans un bloc atomique).
+    Aucun solde ne peut devenir négatif : si c'est le cas, rien n'est modifié
+    et on retourne (message_erreur, None). Sinon (None, changements) avec
+    changements = {compte: (libellé, avant, après)} pour les alertes.
     """
-    soldes = {
-        s.operateur: s
-        for s in SoldeOperateur.objects.select_for_update().filter(
-            boutique=boutique, operateur__in=list(impact.keys()),
-        )
-    }
-    for op, delta in impact.items():
-        actuel = soldes[op].montant if op in soldes else 0
-        if delta < 0 and actuel + delta < 0:
-            return f"Solde {op} insuffisant (disponible : {_fcfa(actuel)}).", None
+    comptes = {}  # cle -> (objet, champ, libellé)
+    sim_ids = [cle[4:] for cle in impact if cle.startswith('sim:')]
+    for sim in Sim.objects.select_for_update().filter(boutique=boutique, id__in=sim_ids):
+        comptes[f"sim:{sim.id}"] = (sim, 'solde', sim.libelle)
+    if 'Caisse' in impact:
+        comptes['Caisse'] = (_caisse(boutique, verrou=True), 'montant', 'Caisse')
 
-    avant = {}
-    for op, delta in impact.items():
+    for cle, delta in impact.items():
+        if cle not in comptes:
+            return "SIM introuvable pour cette opération.", None
+        obj, champ, libelle = comptes[cle]
+        actuel = getattr(obj, champ)
+        if delta < 0 and actuel + delta < 0:
+            return f"Solde {libelle} insuffisant (disponible : {_fcfa(actuel)}).", None
+
+    changements = {}
+    for cle, delta in impact.items():
         if not delta:
             continue
-        solde = soldes.get(op) or SoldeOperateur.objects.create(boutique=boutique, operateur=op)
-        avant[op] = solde.montant
-        solde.montant += delta
-        solde.save()
-    return None, avant
+        obj, champ, libelle = comptes[cle]
+        avant = getattr(obj, champ)
+        setattr(obj, champ, avant + delta)
+        obj.save()
+        changements[cle] = (libelle, avant, avant + delta)
+    return None, changements
+
+
+def _resoudre_sim(boutique, type_tx, sim, operateur, sim_actuelle=None):
+    """
+    Détermine la SIM et l'opérateur d'une opération. Retourne
+    (sim, operateur, None) ou (None, None, message_erreur).
+    Les anciennes versions de l'app n'envoient que l'opérateur : on prend
+    alors la SIM de cet opérateur si la boutique n'en a qu'une.
+    """
+    if sim is not None:
+        if sim.boutique_id != boutique.id or (not sim.active and sim != sim_actuelle):
+            return None, None, "SIM introuvable pour cette boutique."
+        return sim, sim.operateur, None
+
+    if type_tx == 'Depense' and operateur == 'Caisse':
+        return None, 'Caisse', None
+
+    if operateur in OPERATEURS_SIM:
+        sims = list(Sim.objects.filter(boutique=boutique, operateur=operateur, active=True)[:2])
+        if len(sims) == 1:
+            return sims[0], operateur, None
+        if not sims:
+            return None, None, f"Aucune SIM {operateur} : ajoutez d'abord une SIM {operateur}."
+        return None, None, (
+            f"Vous avez plusieurs SIM {operateur} : choisissez la SIM de l'opération "
+            f"(mettez à jour l'application si ce choix n'apparaît pas)."
+        )
+    return None, None, "Choisissez la SIM de l'opération."
 
 
 def _alerter(boutique, titre, message):
@@ -1025,21 +1190,21 @@ def _alerter(boutique, titre, message):
         creer_notification(utilisateur, 'alerte', titre, message, boutique=boutique)
 
 
-def _verifier_alertes(boutique, soldes_avant, transaction=None):
+def _verifier_alertes(boutique, changements, transaction=None):
     """
     Alertes intelligentes :
-    - solde bas : un solde vient de passer sous le seuil de la boutique ;
+    - solde bas : une SIM ou la Caisse vient de passer sous le seuil ;
     - opération anormale : montant >= 3x la moyenne des 30 derniers jours
       pour ce type d'opération (au moins 5 opérations de référence).
     """
     seuil = boutique.seuil_alerte_solde
     if seuil and seuil > 0:
-        for solde in SoldeOperateur.objects.filter(boutique=boutique, operateur__in=list(soldes_avant.keys())):
-            if soldes_avant[solde.operateur] >= seuil > solde.montant:
+        for libelle, avant, apres in changements.values():
+            if avant >= seuil > apres:
                 _alerter(
                     boutique,
-                    f"Solde {solde.operateur} bas",
-                    f"Le solde {solde.operateur} de {boutique.nom} est de {_fcfa(solde.montant)}, "
+                    f"Solde {libelle} bas",
+                    f"Le solde {libelle} de {boutique.nom} est de {_fcfa(apres)}, "
                     f"sous le seuil d'alerte de {_fcfa(seuil)}.",
                 )
 
@@ -1053,10 +1218,11 @@ def _verifier_alertes(boutique, soldes_avant, transaction=None):
         return
     moyenne = reference.aggregate(m=Avg('montant'))['m'] or 0
     if moyenne > 0 and transaction.montant >= 3 * moyenne:
+        source = transaction.sim.libelle if transaction.sim else transaction.operateur
         _alerter(
             boutique,
             "Opération inhabituelle détectée",
-            f"{transaction.get_type_display()} {transaction.operateur} de {_fcfa(transaction.montant)}, "
+            f"{transaction.get_type_display()} {source} de {_fcfa(transaction.montant)}, "
             f"soit {transaction.montant / moyenne:.1f}x la moyenne des 30 derniers jours "
             f"({_fcfa(moyenne)}).",
         )
@@ -1067,7 +1233,7 @@ def _verifier_alertes(boutique, soldes_avant, transaction=None):
 def transactions_boutique(request, boutique_id):
     """
     GET  /boutiques/<boutique_id>/transactions/   → liste avec filtres optionnels
-         ?type=Depot&operateur=MTN&date_debut=2025-01-01&date_fin=2025-12-31&search=...
+         ?type=Depot&operateur=MTN&sim=<id>&date_debut=2025-01-01&date_fin=2025-12-31&search=...&limite=10
     POST /boutiques/<boutique_id>/transactions/   → créer une transaction
     """
     try:
@@ -1080,7 +1246,7 @@ def transactions_boutique(request, boutique_id):
         return Response({"error": msg}, status=403)
 
     if request.method == 'GET':
-        qs = Transaction.objects.filter(boutique=boutique)
+        qs = Transaction.objects.filter(boutique=boutique).select_related('sim')
 
         # Filtres
         type_tx   = request.query_params.get('type')
@@ -1093,6 +1259,9 @@ def transactions_boutique(request, boutique_id):
             qs = qs.filter(type=type_tx)
         if operateur:
             qs = qs.filter(operateur=operateur)
+        sim_id = request.query_params.get('sim')
+        if sim_id:
+            qs = qs.filter(sim_id=sim_id)
         # Bornes explicites dans le fuseau du Bénin : les lookups `date__date`
         # ne renvoient rien sous MySQL sans tables de fuseaux horaires.
         benin_tz = timezone.get_current_timezone()
@@ -1113,8 +1282,15 @@ def transactions_boutique(request, boutique_id):
                 Q(nom_client__icontains=search) |
                 Q(reference__icontains=search) |
                 Q(motif__icontains=search) |
+                Q(sim__nom__icontains=search) |
                 Q(operateur__icontains=search)
             )
+
+        limite = request.query_params.get('limite')
+        if limite:
+            if not limite.isdigit() or int(limite) < 1:
+                return Response({"error": "« limite » doit être un entier positif."}, status=400)
+            qs = qs[:int(limite)]
 
         return Response(TransactionSerializer(qs, many=True).data)
 
@@ -1124,13 +1300,19 @@ def transactions_boutique(request, boutique_id):
         return Response(serializer.errors, status=400)
 
     v = serializer.validated_data
+    sim, operateur, erreur = _resoudre_sim(boutique, v['type'], v.get('sim'), v.get('operateur'))
+    if erreur:
+        return Response({"error": erreur}, status=400)
+
     with db_transaction.atomic():
         erreur, soldes_avant = _appliquer_impact(
-            boutique, _impact_soldes(v['type'], v['operateur'], v['montant']),
+            boutique, _impact_soldes(v['type'], _cle_source(sim and sim.id, operateur), v['montant']),
         )
         if erreur:
             return Response({"error": erreur}, status=400)
-        transaction = serializer.save(boutique=boutique, effectuee_par=request.user)
+        transaction = serializer.save(
+            boutique=boutique, effectuee_par=request.user, sim=sim, operateur=operateur,
+        )
 
     creer_notification(
         utilisateur=request.user,
@@ -1172,8 +1354,8 @@ def detail_transaction(request, boutique_id, transaction_id):
             if transaction.archivee != archivee:
                 with db_transaction.atomic():
                     erreur, soldes_avant = _appliquer_impact(boutique, _impact_soldes(
-                        transaction.type, transaction.operateur, transaction.montant,
-                        sens=-1 if archivee else 1,
+                        transaction.type, _cle_source(transaction.sim_id, transaction.operateur),
+                        transaction.montant, sens=-1 if archivee else 1,
                     ))
                     if erreur:
                         return Response({"error": erreur}, status=400)
@@ -1194,19 +1376,29 @@ def detail_transaction(request, boutique_id, transaction_id):
             return Response({"error": "Restaurez la transaction avant de la modifier."}, status=400)
 
         # Capturer l'impact actuel avant modification, pour pouvoir l'annuler
-        ancien_type, ancien_operateur, ancien_montant = (
-            transaction.type, transaction.operateur, transaction.montant
-        )
+        ancien_type, ancien_montant = transaction.type, transaction.montant
+        ancienne_source = _cle_source(transaction.sim_id, transaction.operateur)
 
         serializer = TransactionSerializer(transaction, data=request.data, partial=True)
         if serializer.is_valid():
             v = serializer.validated_data
+            nouveau_type = v.get('type', ancien_type)
+            if 'sim' in v or 'operateur' in v:
+                sim, operateur, erreur = _resoudre_sim(
+                    boutique, nouveau_type, v.get('sim'), v.get('operateur', transaction.operateur),
+                    sim_actuelle=transaction.sim,
+                )
+                if erreur:
+                    return Response({"error": erreur}, status=400)
+            else:
+                sim, operateur = transaction.sim, transaction.operateur
+
             # Annuler l'ancien impact puis appliquer le nouveau (gère aussi
-            # le cas où le type/l'opérateur/le montant ont changé).
+            # le cas où le type / la SIM / le montant ont changé).
             impact = _cumuler_impacts(
-                _impact_soldes(ancien_type, ancien_operateur, ancien_montant, sens=-1),
+                _impact_soldes(ancien_type, ancienne_source, ancien_montant, sens=-1),
                 _impact_soldes(
-                    v.get('type', ancien_type), v.get('operateur', ancien_operateur),
+                    nouveau_type, _cle_source(sim and sim.id, operateur),
                     v.get('montant', ancien_montant),
                 ),
             )
@@ -1214,7 +1406,7 @@ def detail_transaction(request, boutique_id, transaction_id):
                 erreur, soldes_avant = _appliquer_impact(boutique, impact)
                 if erreur:
                     return Response({"error": erreur}, status=400)
-                serializer.save()
+                serializer.save(sim=sim, operateur=operateur)
             _verifier_alertes(boutique, soldes_avant)
 
             creer_notification(
@@ -1319,10 +1511,9 @@ def rapport_par_operateur(request, boutique_id):
             total_credits=Sum('montant', filter=Q(type='Credit')),
             total_commissions=Sum('commission'),
         )
-        try:
-            solde = SoldeOperateur.objects.get(boutique=boutique, operateur=op).montant
-        except SoldeOperateur.DoesNotExist:
-            solde = 0
+        solde = Sim.objects.filter(
+            boutique=boutique, operateur=op, active=True,
+        ).aggregate(t=Sum('solde'))['t'] or 0
 
         rapport.append({
             "operateur": op,
@@ -1351,11 +1542,11 @@ def solde_global(request, boutique_id):
     if not ok:
         return Response({"error": msg}, status=403)
 
-    soldes = SoldeOperateur.objects.filter(boutique=boutique)
-    data = [{"operateur": s.operateur, "montant": s.montant} for s in soldes]
-    total = sum(s.montant for s in soldes)
+    data = _soldes_par_operateur(boutique)
+    total = sum(s['montant'] for s in data)
+    sims = SimSerializer(Sim.objects.filter(boutique=boutique, active=True), many=True).data
 
-    return Response({"soldes": data, "total": total})
+    return Response({"soldes": data, "sims": sims, "total": total})
 
 
 

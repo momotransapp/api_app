@@ -199,6 +199,41 @@ class SoldeOperateur(models.Model):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# SIM D'OPÉRATION
+# Une boutique peut avoir plusieurs SIM par opérateur (ex. « SIM dépôt »,
+# « SIM retrait »), chacune avec son propre solde. Le solde « Caisse »
+# (espèces) reste dans SoldeOperateur.
+# ══════════════════════════════════════════════════════════════════════
+
+class Sim(models.Model):
+    OPERATEUR_CHOICES = [
+        ('MTN',     'MTN'),
+        ('Moov',    'Moov'),
+        ('Celtiis', 'Celtiis'),
+    ]
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    boutique   = models.ForeignKey(Boutique, on_delete=models.CASCADE, related_name='sims')
+    operateur  = models.CharField(max_length=20, choices=OPERATEUR_CHOICES)
+    nom        = models.CharField(max_length=100)
+    numero     = models.CharField(max_length=30, blank=True)
+    solde      = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    active     = models.BooleanField(default=True)
+    cree_le    = models.DateTimeField(auto_now_add=True)
+    mis_a_jour = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['operateur', 'cree_le']
+        verbose_name = "SIM"
+
+    @property
+    def libelle(self):
+        return f"{self.operateur} — {self.nom}"
+
+    def __str__(self):
+        return f"{self.boutique.nom} — {self.libelle} : {self.solde}"
+
+
+# ══════════════════════════════════════════════════════════════════════
 # TRANSACTION
 # ══════════════════════════════════════════════════════════════════════
 
@@ -225,6 +260,9 @@ class Transaction(models.Model):
     effectuee_par  = models.ForeignKey(Utilisateur, on_delete=models.SET_NULL, null=True, related_name='transactions')
     type           = models.CharField(max_length=10, choices=TYPE_CHOICES)
     operateur      = models.CharField(max_length=20, choices=OPERATEUR_CHOICES)
+    # SIM débitée / créditée (vide pour une dépense payée depuis la Caisse)
+    sim            = models.ForeignKey(Sim, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='transactions')
     montant        = models.DecimalField(max_digits=14, decimal_places=2)
     commission     = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     numero_client  = models.CharField(max_length=30, blank=True)

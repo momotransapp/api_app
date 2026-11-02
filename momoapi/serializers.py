@@ -178,6 +178,35 @@ class SoldeOperateurSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'mis_a_jour']
 
 
+class SimSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Sim
+        fields = ['id', 'operateur', 'nom', 'numero', 'solde', 'active', 'cree_le', 'mis_a_jour']
+        read_only_fields = ['id', 'active', 'cree_le', 'mis_a_jour']
+        extra_kwargs = {'solde': {'min_value': 0}}
+
+    def validate_nom(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Donnez un nom à la SIM (ex. SIM dépôt).")
+        return value
+
+    def validate_numero(self, value):
+        value = value.strip()
+        chiffres = ''.join(c for c in value if c.isdigit())
+        if value and len(chiffres) < 8:
+            raise serializers.ValidationError("Numéro de téléphone invalide.")
+        return value
+
+    def validate(self, data):
+        # L'opérateur d'une SIM existante ne change pas
+        if self.instance is not None:
+            data.pop('operateur', None)
+        elif not data.get('numero'):
+            raise serializers.ValidationError({"numero": "Le numéro de la SIM est requis."})
+        return data
+
+
 class MiseAJourSoldesSerializer(serializers.Serializer):
     """Payload : {"MTN": 50000, "Moov": 20000, ...}"""
     # Un solde ne peut jamais être négatif
@@ -193,11 +222,16 @@ class MiseAJourSoldesSerializer(serializers.Serializer):
 
 class TransactionSerializer(serializers.ModelSerializer):
     effectuee_par_nom = serializers.SerializerMethodField()
+    sim_nom    = serializers.CharField(source='sim.nom', read_only=True, default=None)
+    sim_numero = serializers.CharField(source='sim.numero', read_only=True, default=None)
+    sim        = serializers.PrimaryKeyRelatedField(
+        queryset=Sim.objects.all(), required=False, allow_null=True,
+    )
 
     class Meta:
         model  = Transaction
         fields = [
-            'id', 'type', 'operateur', 'montant', 'commission',
+            'id', 'type', 'operateur', 'sim', 'sim_nom', 'sim_numero', 'montant', 'commission',
             'numero_client', 'nom_client', 'reference', 'remarque',
             'motif', 'montant_remis', 'monnaie_rendue', 'type_credit', 'date',
             'archivee', 'archivee_le',
@@ -206,6 +240,8 @@ class TransactionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'boutique', 'effectuee_par', 'cree_le', 'archivee_le']
         extra_kwargs = {
+            # Déduit de la SIM quand elle est fournie (voir views._resoudre_sim)
+            'operateur':      {'required': False},
             'montant_remis':  {'min_value': 0},
             'monnaie_rendue': {'min_value': 0},
         }

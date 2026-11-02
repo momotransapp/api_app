@@ -1,4 +1,5 @@
 {% extends 'dashboard/base.html' %}
+{% load momo %}
 {% block title %}Transactions{% endblock %}
 {% block header_title %}Transactions{% endblock %}
 {% block breadcrumb %}Gestion › Transactions{% endblock %}
@@ -27,19 +28,21 @@
   <div class="filters" style="flex-wrap:wrap;gap:10px">
     <div class="search-box">
       <span class="search-icon">🔍</span>
-      <input type="text" name="q" value="{{ q }}" placeholder="Numéro client, référence, boutique…">
+      <input type="text" name="q" value="{{ q }}" placeholder="Numéro client, référence, boutique, SIM…">
     </div>
     <select name="type">
       <option value="">Tous types</option>
       <option value="Depot"   {% if type_filtre == 'Depot' %}selected{% endif %}>Dépôt</option>
       <option value="Retrait" {% if type_filtre == 'Retrait' %}selected{% endif %}>Retrait</option>
       <option value="Credit"  {% if type_filtre == 'Credit' %}selected{% endif %}>Crédit</option>
+      <option value="Depense" {% if type_filtre == 'Depense' %}selected{% endif %}>Dépense</option>
     </select>
     <select name="operateur">
       <option value="">Tous opérateurs</option>
       <option value="MTN"     {% if op_filtre == 'MTN' %}selected{% endif %}>MTN</option>
       <option value="Moov"    {% if op_filtre == 'Moov' %}selected{% endif %}>Moov</option>
       <option value="Celtiis" {% if op_filtre == 'Celtiis' %}selected{% endif %}>Celtiis</option>
+      <option value="Caisse"  {% if op_filtre == 'Caisse' %}selected{% endif %}>Caisse (dépenses)</option>
     </select>
     <input type="date" name="date_debut" value="{{ date_debut }}" title="Date début">
     <input type="date" name="date_fin"   value="{{ date_fin }}"   title="Date fin">
@@ -58,7 +61,7 @@
           <th>Opérateur</th>
           <th>Montant</th>
           <th>Commission</th>
-          <th style="text-align:center">Impact Opérateur</th>
+          <th style="text-align:center">Impact SIM</th>
           <th style="text-align:center">Impact Caisse</th>
           <th>N° Client</th>
           <th>Nom client</th>
@@ -71,30 +74,16 @@
         {% for tx in transactions %}
         <tr style="cursor:pointer" onclick="window.location='{% url 'dashboard:transaction_detail' tx.id %}'">
           <td>
-            {% if tx.type == 'Depot' %}<span class="badge badge-green">↑ Dépôt</span>
-            {% elif tx.type == 'Retrait' %}<span class="badge badge-red">↓ Retrait</span>
-            {% else %}<span class="badge badge-blue">◈ Crédit</span>{% endif %}
+            {{ tx|type_badge }}
           </td>
           <td><a href="{% url 'dashboard:boutique_detail' tx.boutique.id %}" class="link" onclick="event.stopPropagation()">{{ tx.boutique.nom }}</a></td>
-          <td><span class="badge badge-gray">{{ tx.operateur }}</span></td>
+          <td>{{ tx|source_badge }}</td>
           <td class="td-main">{{ tx.montant|floatformat:0 }} XOF</td>
           <td style="color:var(--green)">+{{ tx.commission|floatformat:0 }}</td>
-          <!-- Impact Opérateur -->
-          <td style="text-align:center">
-            {% if tx.type == 'Retrait' %}
-            <span style="color:var(--green);font-weight:600">↑ +{{ tx.montant|floatformat:0 }}</span>
-            {% elif tx.type in 'Depot,Credit' %}
-            <span style="color:var(--red);font-weight:600">↓ -{{ tx.montant|floatformat:0 }}</span>
-            {% endif %}
-          </td>
+          <!-- Impact SIM -->
+          <td style="text-align:center">{{ tx|impact:"sim" }}</td>
           <!-- Impact Caisse -->
-          <td style="text-align:center">
-            {% if tx.type in 'Depot,Credit' %}
-            <span style="color:var(--green);font-weight:600">↑ +{{ tx.montant|floatformat:0 }}</span>
-            {% elif tx.type == 'Retrait' %}
-            <span style="color:var(--red);font-weight:600">↓ -{{ tx.montant|floatformat:0 }}</span>
-            {% endif %}
-          </td>
+          <td style="text-align:center">{{ tx|impact:"caisse" }}</td>
           <td style="font-size:12px">{{ tx.numero_client }}</td>
           <td style="font-size:12px;color:var(--text2)">{{ tx.nom_client|default:"—" }}</td>
           <td style="font-size:11px;color:var(--text3);font-family:monospace">{{ tx.reference|default:"—" }}</td>

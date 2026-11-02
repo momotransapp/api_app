@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta, time
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import (
-    Utilisateur, Boutique, MembreBoutique, SoldeOperateur, Transaction, Notification, Pack, Abonnement,
+    Utilisateur, Boutique, MembreBoutique, SoldeOperateur, Transaction, Notification, Pack, Abonnement, Sim,
 )
 
 
@@ -22,14 +22,19 @@ class TransactionsTests(TestCase):
         )
         self.boutique = Boutique.objects.create(proprietaire=self.user, nom='Shop', seuil_alerte_solde=10000)
         MembreBoutique.objects.create(boutique=self.boutique, utilisateur=self.user, role='proprietaire')
-        for op, montant in [('MTN', 50000), ('Moov', 0), ('Celtiis', 0), ('Caisse', 20000)]:
-            SoldeOperateur.objects.create(boutique=self.boutique, operateur=op, montant=montant)
+        # Une SIM par opérateur : les opérations envoyées avec le seul
+        # opérateur (anciennes versions de l'app) utilisent cette SIM.
+        for op, montant in [('MTN', 50000), ('Moov', 0), ('Celtiis', 0)]:
+            Sim.objects.create(boutique=self.boutique, operateur=op, nom=f'SIM {op}', solde=montant)
+        SoldeOperateur.objects.create(boutique=self.boutique, operateur='Caisse', montant=20000)
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.url = f'/api/boutiques/{self.boutique.id}/transactions/'
 
     def solde(self, op):
-        return SoldeOperateur.objects.get(boutique=self.boutique, operateur=op).montant
+        if op == 'Caisse':
+            return SoldeOperateur.objects.get(boutique=self.boutique, operateur=op).montant
+        return sum(s.solde for s in Sim.objects.filter(boutique=self.boutique, operateur=op, active=True))
 
     def post(self, **data):
         return self.client.post(self.url, data, format='json')
@@ -89,6 +94,14 @@ class TransactionsTests(TestCase):
         aujourdhui = timezone.localdate().isoformat()
         r = self.client.get(self.url, {'date_debut': aujourdhui, 'date_fin': aujourdhui})
         self.assertEqual(len(r.data), 1)
+
+    def test_limite_des_dernieres_operations(self):
+        for i in range(4):
+            self.post(type='Depot', operateur='MTN', montant=100 + i, numero_client='97000000')
+        r = self.client.get(self.url, {'limite': 2})
+        self.assertEqual([Decimal(t['montant']) for t in r.data], [Decimal('103'), Decimal('102')])
+        self.assertEqual(self.client.get(self.url, {'limite': 'abc'}).status_code, 400)
+        self.assertEqual(len(self.client.get(self.url).data), 4)
 
     def test_alerte_solde_bas(self):
         self.post(type='Depot', operateur='MTN', montant=45000, numero_client='97000000')
@@ -253,3 +266,274 @@ class InscriptionConnexionTests(TestCase):
         with self.assertRaises(Pack.DoesNotExist):
             self.inscrire()
         self.assertEqual(Utilisateur.objects.count(), 0)
+
+
+class SimsTests(TestCase):
+    """Plusieurs SIM par opérateur, chacune avec son solde."""
+
+    def setUp(self):
+        self.user = Utilisateur.objects.create_user(
+            'sims@example.com', 'motdepasse123', nom='Doe', prenom='Sam', is_verified=True,
+        )
+        pack = Pack.objects.create(cle='basic', nom='Basic', max_boutiques=1, max_utilisateurs=2)
+        Abonnement.objects.create(
+            utilisateur=self.user, pack=pack, statut='actif',
+            debut=timezone.localdate(), fin=timezone.localdate() + timedelta(days=365),
+        )
+        self.boutique = Boutique.objects.create(proprietaire=self.user, nom='Shop', seuil_alerte_solde=10000)
+        MembreBoutique.objects.create(boutique=self.boutique, utilisateur=self.user, role='proprietaire')
+        SoldeOperateur.objects.create(boutique=self.boutique, operateur='Caisse', montant=100000)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.base = f'/api/boutiques/{self.boutique.id}'
+
+    def ajouter_sim(self, **data):
+        data = {'operateur': 'MTN', 'nom': 'SIM dépôt', 'numero': '+2290197426830', 'solde': 0, **data}
+        return self.client.post(f'{self.base}/sims/', data, format='json')
+
+    def operation(self, **data):
+        data = {'numero_client': '97000000', **data}
+        return self.client.post(f'{self.base}/transactions/', data, format='json')
+
+    def test_ajout_et_liste_des_sims(self):
+        r = self.ajouter_sim(solde=30000)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.ajouter_sim(nom='SIM retrait', solde=20000)
+        self.ajouter_sim(operateur='Moov', nom='SIM unique', solde=5000)
+        r = self.client.get(f'{self.base}/sims/')
+        self.assertEqual(len(r.data), 3)
+        # Soldes agrégés par opérateur (SIM confondues)
+        soldes = {s['operateur']: Decimal(str(s['montant'])) for s in self.client.get(f'{self.base}/soldes/').data}
+        self.assertEqual(soldes, {
+            'MTN': Decimal('50000'), 'Moov': Decimal('5000'), 'Celtiis': Decimal('0'), 'Caisse': Decimal('100000'),
+        })
+
+    def test_validation_sim(self):
+        self.assertEqual(self.ajouter_sim(numero='').status_code, 400)
+        self.assertEqual(self.ajouter_sim(nom='  ').status_code, 400)
+        self.assertEqual(self.ajouter_sim(solde=-5).status_code, 400)
+        self.assertEqual(self.ajouter_sim(operateur='Caisse').status_code, 400)
+
+    def test_operation_sur_la_sim_choisie(self):
+        depot = self.ajouter_sim(solde=30000).data
+        retrait = self.ajouter_sim(nom='SIM retrait', solde=0).data
+        r = self.operation(type='Depot', sim=depot['id'], montant=10000)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data['operateur'], 'MTN')
+        self.assertEqual(r.data['sim_nom'], 'SIM dépôt')
+        r = self.operation(type='Retrait', sim=retrait['id'], montant=4000)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(Sim.objects.get(id=depot['id']).solde, Decimal('20000'))
+        self.assertEqual(Sim.objects.get(id=retrait['id']).solde, Decimal('4000'))
+        self.assertEqual(SoldeOperateur.objects.get(boutique=self.boutique).montant, Decimal('106000'))
+        # Historique filtrable par SIM
+        r = self.client.get(f'{self.base}/transactions/', {'sim': retrait['id']})
+        self.assertEqual([t['type'] for t in r.data], ['Retrait'])
+
+    def test_solde_insuffisant_sur_une_sim(self):
+        sim = self.ajouter_sim(solde=1000).data
+        self.ajouter_sim(nom='SIM retrait', solde=500000)
+        r = self.operation(type='Depot', sim=sim['id'], montant=2000)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('SIM dépôt', r.data['error'])
+
+    def test_plusieurs_sims_sans_choix_refuse(self):
+        self.ajouter_sim(solde=30000)
+        self.ajouter_sim(nom='SIM retrait', solde=30000)
+        r = self.operation(type='Depot', operateur='MTN', montant=1000)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('plusieurs SIM', r.data['error'])
+
+    def test_sim_d_une_autre_boutique_refusee(self):
+        autre = Boutique.objects.create(proprietaire=self.user, nom='Autre')
+        sim_autre = Sim.objects.create(boutique=autre, operateur='MTN', nom='X', solde=50000)
+        r = self.operation(type='Depot', sim=str(sim_autre.id), montant=1000)
+        self.assertEqual(r.status_code, 400)
+
+    def test_depense_depuis_une_sim(self):
+        sim = self.ajouter_sim(operateur='Celtiis', nom='SIM Celtiis', solde=8000).data
+        r = self.operation(type='Depense', sim=sim['id'], montant=3000, motif='Transport', numero_client='')
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(Sim.objects.get(id=sim['id']).solde, Decimal('5000'))
+
+    def test_changer_de_sim_a_la_modification(self):
+        a = self.ajouter_sim(solde=30000).data
+        b = self.ajouter_sim(nom='SIM 2', solde=30000).data
+        tx = self.operation(type='Depot', sim=a['id'], montant=10000).data
+        r = self.client.patch(f"{self.base}/transactions/{tx['id']}/", {'sim': b['id']}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(Sim.objects.get(id=a['id']).solde, Decimal('30000'))
+        self.assertEqual(Sim.objects.get(id=b['id']).solde, Decimal('20000'))
+
+    def test_alerte_solde_bas_par_sim(self):
+        sim = self.ajouter_sim(solde=15000).data
+        self.operation(type='Depot', sim=sim['id'], montant=6000)
+        alerte = Notification.objects.get(type='alerte')
+        self.assertIn('MTN — SIM dépôt', alerte.titre)
+
+    def test_mise_a_jour_et_retrait_de_sim(self):
+        sim = self.ajouter_sim(solde=30000).data
+        url = f"{self.base}/sims/{sim['id']}/"
+        self.assertEqual(self.client.patch(url, {'solde': 45000}, format='json').data['solde'], '45000.00')
+        # Retrait impossible tant que le solde n'est pas à 0
+        self.assertEqual(self.client.delete(url).status_code, 400)
+        self.client.patch(url, {'solde': 0}, format='json')
+        self.assertEqual(self.client.delete(url).status_code, 200)
+        self.assertEqual(self.client.get(f'{self.base}/sims/').data, [])
+
+    def test_gerant_ne_peut_pas_ajouter_de_sim(self):
+        gerant = Utilisateur.objects.create_user('g@example.com', 'x', nom='G', prenom='G', is_verified=True)
+        MembreBoutique.objects.create(boutique=self.boutique, utilisateur=gerant, role='gerant')
+        sim = self.ajouter_sim(solde=1000).data
+        self.client.force_authenticate(gerant)
+        self.assertEqual(self.ajouter_sim(nom='SIM 2').status_code, 403)
+        # … mais peut mettre à jour le solde
+        r = self.client.patch(f"{self.base}/sims/{sim['id']}/", {'solde': 2000}, format='json')
+        self.assertEqual(r.status_code, 200)
+
+    def test_ancienne_app_mise_a_jour_solde_operateur(self):
+        url = f'{self.base}/soldes/mise-a-jour/'
+        # Aucune SIM MTN : une SIM est créée avec ce solde
+        self.assertEqual(self.client.patch(url, {'MTN': 7000, 'Caisse': 1}, format='json').status_code, 200)
+        self.assertEqual(Sim.objects.get(boutique=self.boutique).solde, Decimal('7000'))
+        self.ajouter_sim(nom='SIM 2')
+        self.assertEqual(self.client.patch(url, {'MTN': 1}, format='json').status_code, 400)
+
+
+class MigrationSimsTests(TransactionTestCase):
+    """0012 : les anciens soldes par opérateur deviennent une SIM chacun."""
+
+    avant = [('momoapi', '0011_sims')]
+    apres = [('momoapi', '0012_migrer_soldes_vers_sims')]
+
+    def test_soldes_et_transactions_migres(self):
+        from django.db import connection
+        from django.db.migrations.executor import MigrationExecutor
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(self.avant)
+        apps = executor.loader.project_state(self.avant).apps
+        U = apps.get_model('momoapi', 'Utilisateur')
+        B = apps.get_model('momoapi', 'Boutique')
+        S = apps.get_model('momoapi', 'SoldeOperateur')
+        T = apps.get_model('momoapi', 'Transaction')
+
+        user = U.objects.create(email='m@example.com', nom='M', prenom='M')
+        boutique = B.objects.create(proprietaire=user, nom='Shop')
+        for op, montant in [('MTN', 40000), ('Moov', 0), ('Caisse', 9000)]:
+            S.objects.create(boutique=boutique, operateur=op, montant=montant)
+        T.objects.create(boutique=boutique, type='Depot', operateur='MTN', montant=1000, numero_client='1')
+
+        executor = MigrationExecutor(connection)
+        executor.loader.build_graph()
+        executor.migrate(self.apres)
+        apps = executor.loader.project_state(self.apres).apps
+        Sim = apps.get_model('momoapi', 'Sim')
+        S = apps.get_model('momoapi', 'SoldeOperateur')
+        T = apps.get_model('momoapi', 'Transaction')
+
+        sims = {s.operateur: s for s in Sim.objects.filter(boutique_id=boutique.id)}
+        self.assertEqual(set(sims), {'MTN', 'Moov'})  # pas de Celtiis : ni solde ni opération
+        self.assertEqual(sims['MTN'].solde, Decimal('40000'))
+        self.assertEqual(sims['MTN'].nom, 'SIM MTN')
+        self.assertEqual(list(S.objects.filter(boutique_id=boutique.id).values_list('operateur', 'montant')),
+                         [('Caisse', Decimal('9000'))])
+        self.assertEqual(T.objects.get().sim_id, sims['MTN'].id)
+
+        # Migration inverse : les soldes par opérateur sont reconstitués
+        executor = MigrationExecutor(connection)
+        executor.loader.build_graph()
+        executor.migrate(self.avant)
+        apps = executor.loader.project_state(self.avant).apps
+        S = apps.get_model('momoapi', 'SoldeOperateur')
+        self.assertEqual(S.objects.get(boutique_id=boutique.id, operateur='MTN').montant, Decimal('40000'))
+
+        # Remettre la base au dernier état pour les autres tests
+        executor = MigrationExecutor(connection)
+        executor.loader.build_graph()
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
+
+class ParcoursAppMobileTests(TestCase):
+    """Rejoue les requêtes exactes envoyées par l'app (add.tsx, SimSoldeModal, DetailsScreen)."""
+
+    def setUp(self):
+        self.user = Utilisateur.objects.create_user(
+            'app@example.com', 'motdepasse123', nom='Doe', prenom='Ana', is_verified=True,
+        )
+        pack = Pack.objects.create(cle='basic', nom='Basic', max_boutiques=1, max_utilisateurs=1)
+        Abonnement.objects.create(
+            utilisateur=self.user, pack=pack, statut='actif',
+            debut=timezone.localdate(), fin=timezone.localdate() + timedelta(days=365),
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_parcours_complet(self):
+        # Création de boutique depuis l'app : seule la Caisse existe
+        boutique = self.client.post('/api/boutiques/', {'nom': 'Ets Test', 'couleur': '#3B82F6', 'devise': 'XOF', 'adresse': ''}, format='json').data
+        base = f"/api/boutiques/{boutique['id']}"
+        self.assertEqual(self.client.get(f'{base}/sims/').data, [])
+        soldes = {s['operateur']: Decimal(str(s['montant'])) for s in self.client.get(f'{base}/soldes/').data}
+        self.assertEqual(soldes['Caisse'], 0)
+
+        # AjoutSimScreen
+        r = self.client.post(f'{base}/sims/', {'operateur': 'MTN', 'nom': 'SIM dépôt', 'numero': '+2290197426830', 'solde': 50000}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        sim = r.data
+        self.client.post(f'{base}/sims/', {'operateur': 'MTN', 'nom': 'SIM retrait', 'numero': '+2290197426831', 'solde': 0}, format='json')
+
+        # SimSoldeModal : Caisse puis SIM
+        self.assertEqual(self.client.patch(f'{base}/soldes/mise-a-jour/', {'Caisse': 20000}, format='json').status_code, 200)
+
+        # add.tsx — Dépôt (opérateur + SIM + montant remis / monnaie)
+        depot = self.client.post(f'{base}/transactions/', {
+            'type': 'Depot', 'operateur': 'MTN', 'sim': sim['id'], 'montant': 4500,
+            'numero_client': '0197000000', 'nom_client': 'Kevin', 'reference': 'REF1', 'remarque': '',
+            'montant_remis': 5000, 'monnaie_rendue': 500,
+        }, format='json')
+        self.assertEqual(depot.status_code, 201, depot.data)
+        self.assertEqual(depot.data['sim_nom'], 'SIM dépôt')
+
+        # add.tsx — Dépense payée en espèces (sim: null)
+        depense = self.client.post(f'{base}/transactions/', {
+            'type': 'Depense', 'operateur': 'Caisse', 'sim': None, 'montant': 1000, 'motif': 'Eau', 'remarque': '',
+        }, format='json')
+        self.assertEqual(depense.status_code, 201, depense.data)
+
+        # add.tsx — Crédit sans montant remis (champs vides envoyés à null)
+        credit = self.client.post(f'{base}/transactions/', {
+            'type': 'Credit', 'operateur': 'MTN', 'sim': sim['id'], 'montant': 500, 'type_credit': 'Forfait',
+            'numero_client': '0197000001', 'nom_client': '', 'reference': '', 'remarque': '',
+            'montant_remis': None, 'monnaie_rendue': None,
+        }, format='json')
+        self.assertEqual(credit.status_code, 201, credit.data)
+
+        # Soldes attendus : SIM 50 000 - 4 500 - 500 ; Caisse 20 000 + 4 500 - 1 000 + 500
+        self.assertEqual(Sim.objects.get(id=sim['id']).solde, Decimal('45000'))
+        soldes = {s['operateur']: Decimal(str(s['montant'])) for s in self.client.get(f'{base}/soldes/').data}
+        self.assertEqual(soldes, {'MTN': Decimal('45000'), 'Moov': 0, 'Celtiis': 0, 'Caisse': Decimal('24000')})
+
+        # DetailsScreen — modification (le corps n'envoie pas la SIM : elle est conservée)
+        r = self.client.patch(f"{base}/transactions/{depot.data['id']}/", {
+            'montant': 5500, 'commission': 0, 'numero_client': '0197000000', 'nom_client': 'Kevin',
+            'reference': 'REF1', 'remarque': '', 'montant_remis': 6000, 'monnaie_rendue': 500,
+        }, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(str(r.data['sim']), str(sim['id']))
+        self.assertEqual(Sim.objects.get(id=sim['id']).solde, Decimal('44000'))
+
+        # DetailsScreen — archivage puis restauration
+        url = f"{base}/transactions/{credit.data['id']}/"
+        self.assertEqual(self.client.patch(url, {'archivee': True}, format='json').status_code, 200)
+        self.assertEqual(Sim.objects.get(id=sim['id']).solde, Decimal('44500'))
+        self.assertEqual(self.client.patch(url, {'archivee': False}, format='json').status_code, 200)
+        self.assertEqual(Sim.objects.get(id=sim['id']).solde, Decimal('44000'))
+
+        # Historique : la SIM est renvoyée pour l'affichage
+        liste = self.client.get(f'{base}/transactions/').data
+        self.assertEqual({t['sim_nom'] for t in liste}, {'SIM dépôt', None})
+
+        # Rapports (écran stats) : solde restant MTN = somme des SIM
+        rapport = self.client.get(f'{base}/rapports/solde-global/').data
+        self.assertEqual(len(rapport['sims']), 2)

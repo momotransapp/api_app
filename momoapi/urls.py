@@ -46,6 +46,10 @@ urlpatterns = [
          views.mettre_a_jour_soldes,                                                 name='mettre_a_jour_soldes'),
 
     # Transactions
+    path('boutiques/<uuid:boutique_id>/sims/',
+         views.sims_boutique,                                                        name='sims_boutique'),
+    path('boutiques/<uuid:boutique_id>/sims/<uuid:sim_id>/',
+         views.detail_sim,                                                           name='detail_sim'),
     path('boutiques/<uuid:boutique_id>/transactions/',
          views.transactions_boutique,                                                name='transactions_boutique'),
     path('boutiques/<uuid:boutique_id>/transactions/<uuid:transaction_id>/',

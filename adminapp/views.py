@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -8,6 +8,14 @@ from django.http import JsonResponse
 from django.contrib import messages
 
 from momoapi.models import *
+
+
+def _jour(d):
+    """Bornes [début, fin[ d'une journée dans le fuseau du serveur.
+    (Les lookups « date__date » ne renvoient rien sous MySQL sans tables
+    de fuseaux horaires.)"""
+    debut = timezone.make_aware(datetime.combine(d, time.min))
+    return debut, debut + timedelta(days=1)
 
 
 def staff_required(view_func):
@@ -94,7 +102,7 @@ def logout_view(request):
 
 @staff_required
 def accueil(request):
-    today      = date.today()
+    today      = timezone.localdate()
     hier       = today - timedelta(days=1)
     ce_mois    = today.replace(day=1)
     mois_passe = (ce_mois - timedelta(days=1)).replace(day=1)
@@ -102,10 +110,10 @@ def accueil(request):
     # ── KPIs principaux ──
     kpis = {
         'total_utilisateurs':   Utilisateur.objects.count(),
-        'nouveaux_ce_mois':     Utilisateur.objects.filter(date_inscription__date__gte=ce_mois).count(),
+        'nouveaux_ce_mois':     Utilisateur.objects.filter(date_inscription__gte=_jour(ce_mois)[0]).count(),
         'total_boutiques':      Boutique.objects.filter(active=True).count(),
         'total_transactions':   Transaction.objects.count(),
-        'transactions_auj':     Transaction.objects.filter(date__date=today).count(),
+        'transactions_auj':     Transaction.objects.filter(date__gte=_jour(today)[0], date__lt=_jour(today)[1]).count(),
         'total_avis':           Avis.objects.count(),
         'avis_non_lus':         Avis.objects.filter(lu=False).count(),
         'abonnements_actifs':   Abonnement.objects.filter(statut='actif', fin__gte=today).count(),
@@ -115,7 +123,8 @@ def accueil(request):
     tx_7j = []
     for i in range(6, -1, -1):
         d = today - timedelta(days=i)
-        cnt = Transaction.objects.filter(date__date=d).count()
+        debut, fin = _jour(d)
+        cnt = Transaction.objects.filter(date__gte=debut, date__lt=fin).count()
         tx_7j.append({'date': d.strftime('%d/%m'), 'count': cnt})
 
     # ── Répartition par type ──
@@ -130,7 +139,7 @@ def accueil(request):
     )
 
     # ── Dernières transactions ──
-    dernieres_tx = Transaction.objects.select_related('boutique', 'effectuee_par').order_by('-date')[:8]
+    dernieres_tx = Transaction.objects.select_related('boutique', 'effectuee_par', 'sim').order_by('-date')[:8]
 
     # ── Répartition abonnements par pack ──
     abo_par_pack = (
@@ -143,7 +152,7 @@ def accueil(request):
     users_30j = []
     for i in range(29, -1, -1):
         d = today - timedelta(days=i)
-        cnt = Utilisateur.objects.filter(date_inscription__date=d).count()
+        cnt = Utilisateur.objects.filter(date_inscription__gte=_jour(d)[0], date_inscription__lt=_jour(d)[1]).count()
         users_30j.append({'date': d.strftime('%d/%m'), 'count': cnt})
 
     context = {
@@ -260,8 +269,18 @@ def boutiques(request):
 def boutique_detail(request, boutique_id):
     boutique = get_object_or_404(Boutique, id=boutique_id)
     membres  = MembreBoutique.objects.filter(boutique=boutique).select_related('utilisateur')
-    soldes   = SoldeOperateur.objects.filter(boutique=boutique)
-    transactions = Transaction.objects.filter(boutique=boutique).select_related('effectuee_par').order_by('-date')[:15]
+    sims = list(Sim.objects.filter(boutique=boutique, active=True).order_by('operateur', 'cree_le'))
+    soldes_par_operateur = [
+        {
+            'operateur': op,
+            'sims': [s for s in sims if s.operateur == op],
+            'total': sum(s.solde for s in sims if s.operateur == op),
+        }
+        for op in ('MTN', 'Moov', 'Celtiis')
+    ]
+    caisse = SoldeOperateur.objects.filter(boutique=boutique, operateur='Caisse').first()
+    caisse = caisse.montant if caisse else 0
+    transactions = Transaction.objects.filter(boutique=boutique).select_related('effectuee_par', 'sim').order_by('-date')[:15]
 
     # Stats transactions
     stats = Transaction.objects.filter(boutique=boutique).aggregate(
@@ -281,7 +300,9 @@ def boutique_detail(request, boutique_id):
         'page': 'boutiques',
         'boutique': boutique,
         'membres': membres,
-        'soldes': soldes,
+        'soldes_par_operateur': soldes_par_operateur,
+        'caisse': caisse,
+        'total_soldes': sum(g['total'] for g in soldes_par_operateur) + caisse,
         'transactions': transactions,
         'stats': stats,
     })
@@ -299,23 +320,28 @@ def transactions_view(request):
     date_debut = request.GET.get('date_debut', '')
     date_fin   = request.GET.get('date_fin', '')
 
-    qs = Transaction.objects.select_related('boutique', 'effectuee_par').order_by('-date')
+    qs = Transaction.objects.select_related('boutique', 'effectuee_par', 'sim').order_by('-date')
 
     if q:
         qs = qs.filter(
             Q(numero_client__icontains=q) |
             Q(nom_client__icontains=q) |
             Q(reference__icontains=q) |
-            Q(boutique__nom__icontains=q)
+            Q(boutique__nom__icontains=q) |
+            Q(sim__nom__icontains=q) |
+            Q(sim__numero__icontains=q)
         )
     if type_filtre:
         qs = qs.filter(type=type_filtre)
     if op_filtre:
         qs = qs.filter(operateur=op_filtre)
-    if date_debut:
-        qs = qs.filter(date__date__gte=date_debut)
-    if date_fin:
-        qs = qs.filter(date__date__lte=date_fin)
+    try:
+        if date_debut:
+            qs = qs.filter(date__gte=_jour(date.fromisoformat(date_debut))[0])
+        if date_fin:
+            qs = qs.filter(date__lt=_jour(date.fromisoformat(date_fin))[1])
+    except ValueError:
+        messages.error(request, "Dates invalides.")
 
     totaux = qs.aggregate(
         total_montant=Sum('montant'),
@@ -338,28 +364,11 @@ def transactions_view(request):
 @staff_required
 def transaction_detail(request, tx_id):
     """Affiche le détail complet d'une transaction"""
-    tx = get_object_or_404(Transaction, id=tx_id)
-    
-    # Calculer l'impact sur les comptes
-    if tx.type == 'Retrait':
-        impact_operateur = f"+{tx.montant}"
-        impact_caisse = f"-{tx.montant}"
-    else:  # Depot ou Credit
-        impact_operateur = f"-{tx.montant}"
-        impact_caisse = f"+{tx.montant}"
-    
-    # Récupérer les transactions précédentes pour montrer le solde avant/après
-    tx_avant = Transaction.objects.filter(
-        boutique=tx.boutique,
-        operateur=tx.operateur,
-        date__lt=tx.date
-    ).order_by('-date').first()
-    
+    tx = get_object_or_404(Transaction.objects.select_related('boutique', 'sim', 'effectuee_par'), id=tx_id)
+    # L'impact sur la SIM et la Caisse est calculé par les filtres « momo »
     return render(request, 'dashboard/transaction_detail.html', {
         'page': 'transactions',
         'tx': tx,
-        'impact_operateur': impact_operateur,
-        'impact_caisse': impact_caisse,
     })
 
 
