@@ -116,26 +116,24 @@
 
         <!-- Abonnement actif -->
         <div>
-          <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Abonnement actuel</div>
-          {% with abo=abonnements.first %}
-          {% if abo %}
+          <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Offre actuelle</div>
           <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px">
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <span class="td-main">{{ abo.pack.nom }}</span>
-              {% if abo.statut == 'actif' %}
-              <span class="badge badge-green">Actif</span>
+              <span class="td-main">{{ offre.nom|default:"Basic" }}</span>
+              {% if abonnement_payant %}
+              <span class="badge badge-green">Payante · active</span>
               {% else %}
-              <span class="badge badge-red">{{ abo.statut }}</span>
+              <span class="badge badge-gray">Gratuite</span>
               {% endif %}
             </div>
             <div style="font-size:11px;color:var(--text3);margin-top:4px">
-              Du {{ abo.debut|date:"d/m/Y" }} au {{ abo.fin|date:"d/m/Y" }}
+              {% if abonnement_payant %}
+              Du {{ abonnement_payant.debut|date:"d/m/Y" }} au {{ abonnement_payant.fin|date:"d/m/Y" }}
+              {% else %}
+              Offre gratuite sans limite de durée
+              {% endif %}
             </div>
           </div>
-          {% else %}
-          <span style="color:var(--text3);font-size:13px">Aucun abonnement</span>
-          {% endif %}
-          {% endwith %}
         </div>
       </div>
     </div>
@@ -150,7 +148,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Boutique</th><th>Rôle</th><th>Depuis</th><th></th></tr>
+        <tr><th>Boutique</th><th>Rôle</th><th>SIM actives</th><th>Depuis</th><th></th></tr>
       </thead>
       <tbody>
         {% for m in boutiques %}
@@ -165,11 +163,12 @@
             <span class="badge badge-purple">Admin</span>
             {% endif %}
           </td>
+          <td><span class="badge badge-purple">{{ m.nb_sims }}</span></td>
           <td style="font-size:12px;color:var(--text3)">{{ m.ajoute_le|date:"d/m/Y" }}</td>
           <td><a href="{% url 'dashboard:boutique_detail' m.boutique.id %}" class="btn btn-ghost btn-sm">Voir →</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="4" class="empty">Aucune boutique</td></tr>
+        <tr><td colspan="5" class="empty">Aucune boutique</td></tr>
         {% endfor %}
       </tbody>
     </table>

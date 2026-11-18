@@ -24,7 +24,7 @@ from .permissions import (
     boutiques_autorisees_ids,
 )
 from django.db import transaction as db_transaction
-from django.db.models import Avg, Sum, Q
+from django.db.models import Avg, Count, Sum, Q
 
 logger = logging.getLogger(__name__)
 
@@ -46,22 +46,43 @@ class CodesAuthThrottle(AnonRateThrottle):
             return True
 
 
-def _verifier_acces_boutique(boutique, utilisateur):
+def _pack_effectif(utilisateur):
+    """Offre active de l'utilisateur, ou Basic (offre gratuite permanente)."""
+    abo = get_abonnement_actif(utilisateur)
+    return abo.pack if abo else Pack.objects.filter(cle='basic', actif=True).first()
+
+
+def _refus_offre(boutique, utilisateur, message_proprietaire):
     """
-    Vérifie que l'utilisateur est membre actif de la boutique ET que celle-ci
-    reste dans la limite actuelle de l'abonnement de son propriétaire (les
-    boutiques les plus anciennes restent accessibles en priorité si
-    l'abonnement a expiré sans être renouvelé).
+    Refus lié à l'offre du propriétaire. Lui seul peut changer d'offre : il
+    reçoit upgrade_required (l'app l'envoie vers la page des offres), les
+    autres membres sont invités à le contacter.
+    """
+    if boutique.proprietaire_id == utilisateur.id:
+        return Response({"error": message_proprietaire, "upgrade_required": True}, status=403)
+    return Response({
+        "error": "Cette fonctionnalité n'est pas incluse dans l'offre de la boutique. "
+                 "Contactez son propriétaire pour passer à une offre supérieure.",
+        "offre_proprietaire_requise": True,
+    }, status=403)
+
+
+def _refus_acces_boutique(boutique, utilisateur):
+    """
+    Retourne une Response 403 si l'utilisateur ne peut pas utiliser la
+    boutique, sinon None. Une boutique au-delà de la limite de l'offre du
+    propriétaire (abonnement expiré) est suspendue, pas retirée : les
+    boutiques les plus anciennes restent accessibles en priorité.
     """
     if not MembreBoutique.objects.filter(boutique=boutique, utilisateur=utilisateur, actif=True).exists():
-        return False, "Accès refusé."
+        return Response({"error": "Accès refusé."}, status=403)
     if boutique.id not in boutiques_autorisees_ids(boutique.proprietaire):
-        return False, (
-            "Cette boutique n'est plus accessible : l'abonnement de son "
-            "propriétaire ne couvre plus ce nombre de boutiques. "
-            "Renouvelez l'abonnement pour la réactiver."
+        return _refus_offre(
+            boutique, utilisateur,
+            f"La boutique « {boutique.nom} » est suspendue : votre offre actuelle ne couvre pas "
+            "ce nombre de boutiques. Passez à une offre supérieure pour la réactiver.",
         )
-    return True, None
+    return None
 
 
 def _date_rapport(request, parameter='date'):
@@ -481,7 +502,7 @@ def rechercher_utilisateur(request):
 @permission_classes([AllowAny])
 def liste_packs(request):
     """GET /packs/  → liste des packs disponibles"""
-    packs = Pack.objects.filter(actif=True)
+    packs = Pack.objects.filter(actif=True).order_by('prix_mensuel')
     return Response(PackSerializer(packs, many=True).data)
 
 
@@ -686,17 +707,20 @@ def historique_abonnements(request):
 
 def _verifier_limite_boutiques(utilisateur):
     """Vérifie si l'utilisateur peut créer une boutique supplémentaire."""
-    abo = get_abonnement_actif(utilisateur)
-    if not abo:
-        return False, "Aucun abonnement actif."
+    pack = _pack_effectif(utilisateur)
+    if not pack:
+        return False, "Aucune offre disponible."
 
-    max_b = abo.pack.max_boutiques
+    max_b = pack.max_boutiques
     if max_b == -1:
         return True, None
 
     nb_boutiques = Boutique.objects.filter(proprietaire=utilisateur, active=True).count()
     if nb_boutiques >= max_b:
-        return False, f"Votre pack {abo.pack.nom} permet au maximum {max_b} boutique(s)."
+        return False, (
+            f"Votre offre {pack.nom} permet au maximum {max_b} boutique(s). "
+            "Passez à une offre supérieure pour ajouter une boutique."
+        )
     return True, None
 
 
@@ -726,7 +750,7 @@ def mes_boutiques(request):
     # ── POST : créer une boutique ─────────────────────────────────────────
     ok, msg = _verifier_limite_boutiques(request.user)
     if not ok:
-        return Response({"error": msg}, status=403)
+        return Response({"error": msg, "upgrade_required": True}, status=403)
  
     serializer = BoutiqueSerializer(data=request.data)
     if not serializer.is_valid():
@@ -762,9 +786,9 @@ def detail_boutique(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_acces_boutique(boutique, request.user)
+    if refus:
+        return refus
 
     if request.method == 'GET':
         return Response(BoutiqueSerializer(boutique).data)
@@ -791,26 +815,7 @@ def detail_boutique(request, boutique_id):
 # ══════════════════════════════════════════════════════════════════════════
 
 def _verifier_limite_membres(boutique):
-    """Vérifie si la boutique peut accueillir un membre supplémentaire."""
-    proprietaire = boutique.proprietaire
-    abo = get_abonnement_actif(proprietaire)
-    # Basic est l'offre gratuite permanente : elle reste valable même si une
-    # ancienne ligne d'abonnement est absente ou expirée.
-    pack = abo.pack if abo else Pack.objects.filter(cle='basic', actif=True).first()
-    if not pack:
-        return False, "Aucune offre disponible pour le propriétaire."
-
-    max_u = pack.max_utilisateurs
-    if max_u == -1:
-        return True, None
-
-    # La limite du pack concerne les collaborateurs ajoutés. Le propriétaire,
-    # créé automatiquement avec sa boutique, ne consomme pas cette place.
-    nb = MembreBoutique.objects.filter(
-        boutique=boutique, actif=True,
-    ).exclude(role='proprietaire').count()
-    if nb >= max_u:
-        return False, f"Votre pack permet au maximum {max_u} utilisateur(s) par boutique."
+    """Tous les packs de la politique actuelle autorisent les utilisateurs illimités."""
     return True, None
 
 
@@ -826,9 +831,9 @@ def membres_boutique(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_acces_boutique(boutique, request.user)
+    if refus:
+        return refus
 
     if request.method == 'GET':
         membres = MembreBoutique.objects.filter(boutique=boutique, actif=True).select_related('utilisateur')
@@ -915,9 +920,9 @@ def _boutique_accessible(request, boutique_id):
         boutique = Boutique.objects.get(id=boutique_id)
     except Boutique.DoesNotExist:
         return None, Response({"error": "Boutique introuvable."}, status=404)
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return None, Response({"error": msg}, status=403)
+    refus = _refus_acces_boutique(boutique, request.user)
+    if refus:
+        return None, refus
     return boutique, None
 
 
@@ -1241,9 +1246,9 @@ def transactions_boutique(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_acces_boutique(boutique, request.user)
+    if refus:
+        return refus
 
     if request.method == 'GET':
         qs = Transaction.objects.filter(boutique=boutique).select_related('sim')
@@ -1339,9 +1344,9 @@ def detail_transaction(request, boutique_id, transaction_id):
     except (Boutique.DoesNotExist, Transaction.DoesNotExist):
         return Response({"error": "Introuvable."}, status=404)
 
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_acces_boutique(boutique, request.user)
+    if refus:
+        return refus
 
     if request.method == 'GET':
         return Response(TransactionSerializer(transaction).data)
@@ -1424,14 +1429,15 @@ def detail_transaction(request, boutique_id, transaction_id):
 #  RAPPORTS
 # ══════════════════════════════════════════════════════════════════════════
 
-def _verifier_acces_rapports(utilisateur, boutique):
-    """Vérifie l'accès aux rapports avancés selon le pack."""
-    abo = get_abonnement_actif(utilisateur)
-    if not abo:
-        return False, "Aucun abonnement actif."
-    if not abo.pack.rapports_avances:
-        return False, "Les rapports avancés nécessitent le Pack Pro ou Premium."
-    return True, None
+def _refus_rapports_avances(boutique, utilisateur):
+    """Analyses par opérateur et commissions : Basic Plus ou supérieur (offre du propriétaire)."""
+    pack = _pack_effectif(boutique.proprietaire)
+    if pack and pack.rapports_avances:
+        return None
+    return _refus_offre(
+        boutique, utilisateur,
+        "Les analyses par opérateur et les commissions sont incluses à partir de l'offre Basic Plus.",
+    )
 
 
 @api_view(['GET'])
@@ -1446,9 +1452,9 @@ def rapport_journalier(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_acces_boutique(boutique, request.user)
+    if refus:
+        return refus
 
     selected_date, error_response = _date_rapport(request)
     if error_response:
@@ -1460,6 +1466,12 @@ def rapport_journalier(request, boutique_id):
         total_retraits=Sum('montant', filter=Q(type='Retrait')),
         total_credits=Sum('montant', filter=Q(type='Credit')),
         total_depenses=Sum('montant', filter=Q(type='Depense')),
+        nombre_depots=Count('id', filter=Q(type='Depot')),
+        nombre_retraits=Count('id', filter=Q(type='Retrait')),
+        nombre_credits=Count('id', filter=Q(type='Credit')),
+        nombre_depenses=Count('id', filter=Q(type='Depense')),
+        nombre_operations=Count('id'),
+        total_commissions=Sum('commission'),
     )
 
     total_depots     = totaux['total_depots']     or 0
@@ -1474,6 +1486,14 @@ def rapport_journalier(request, boutique_id):
         "total_retraits": total_retraits,
         "total_credits": total_credits,
         "total_depenses": total_depenses,
+        "nombre_depots": totaux['nombre_depots'] or 0,
+        "nombre_retraits": totaux['nombre_retraits'] or 0,
+        "nombre_credits": totaux['nombre_credits'] or 0,
+        "nombre_depenses": totaux['nombre_depenses'] or 0,
+        "nombre_operations": totaux['nombre_operations'] or 0,
+        "total_commissions": totaux['total_commissions'] or 0,
+        # Bénéfice du jour = commissions gagnées − dépenses de la cabine
+        "benefice_net": (totaux['total_commissions'] or 0) - total_depenses,
     })
 
 
@@ -1482,20 +1502,20 @@ def rapport_journalier(request, boutique_id):
 def rapport_par_operateur(request, boutique_id):
     """
     GET /boutiques/<boutique_id>/rapports/operateurs/?date=2025-04-10
-    Nécessite Pack Pro ou Premium.
+    Nécessite l'offre Basic Plus ou supérieure (offre du propriétaire).
     """
     try:
         boutique = Boutique.objects.get(id=boutique_id)
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_acces_boutique(boutique, request.user)
+    if refus:
+        return refus
 
-    ok, msg = _verifier_acces_rapports(request.user, boutique)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_rapports_avances(boutique, request.user)
+    if refus:
+        return refus
 
     selected_date, error_response = _date_rapport(request)
     if error_response:
@@ -1509,7 +1529,13 @@ def rapport_par_operateur(request, boutique_id):
             total_depots=Sum('montant', filter=Q(type='Depot')),
             total_retraits=Sum('montant', filter=Q(type='Retrait')),
             total_credits=Sum('montant', filter=Q(type='Credit')),
+            total_depenses=Sum('montant', filter=Q(type='Depense')),
             total_commissions=Sum('commission'),
+            nombre_depots=Count('id', filter=Q(type='Depot')),
+            nombre_retraits=Count('id', filter=Q(type='Retrait')),
+            nombre_credits=Count('id', filter=Q(type='Credit')),
+            nombre_depenses=Count('id', filter=Q(type='Depense')),
+            nombre_operations=Count('id'),
         )
         solde = Sim.objects.filter(
             boutique=boutique, operateur=op, active=True,
@@ -1520,7 +1546,13 @@ def rapport_par_operateur(request, boutique_id):
             "total_depots":      totaux['total_depots'] or 0,
             "total_retraits":    totaux['total_retraits'] or 0,
             "total_credits":     totaux['total_credits'] or 0,
+            "total_depenses":    totaux['total_depenses'] or 0,
             "total_commissions": totaux['total_commissions'] or 0,
+            "nombre_depots": totaux['nombre_depots'] or 0,
+            "nombre_retraits": totaux['nombre_retraits'] or 0,
+            "nombre_credits": totaux['nombre_credits'] or 0,
+            "nombre_depenses": totaux['nombre_depenses'] or 0,
+            "nombre_operations": totaux['nombre_operations'] or 0,
             "solde_restant":     solde,
         })
 
@@ -1538,9 +1570,9 @@ def solde_global(request, boutique_id):
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_acces_boutique(boutique, request.user)
+    if refus:
+        return refus
 
     data = _soldes_par_operateur(boutique)
     total = sum(s['montant'] for s in data)
@@ -1555,20 +1587,20 @@ def solde_global(request, boutique_id):
 def rapport_commissions(request, boutique_id):
     """
     GET /boutiques/<boutique_id>/rapports/commissions/?date_debut=...&date_fin=...
-    Nécessite Pack Pro ou Premium.
+    Nécessite l'offre Basic Plus ou supérieure (offre du propriétaire).
     """
     try:
         boutique = Boutique.objects.get(id=boutique_id)
     except Boutique.DoesNotExist:
         return Response({"error": "Boutique introuvable."}, status=404)
 
-    ok, msg = _verifier_acces_boutique(boutique, request.user)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_acces_boutique(boutique, request.user)
+    if refus:
+        return refus
 
-    ok, msg = _verifier_acces_rapports(request.user, boutique)
-    if not ok:
-        return Response({"error": msg}, status=403)
+    refus = _refus_rapports_avances(boutique, request.user)
+    if refus:
+        return refus
 
     # Le client mobile envoie une seule date. Les deux paramètres historiques
     # restent acceptés afin de ne pas casser les anciennes versions.
@@ -1595,11 +1627,91 @@ def rapport_commissions(request, boutique_id):
 
     rapport = []
     for op in ['MTN', 'Moov', 'Celtiis']:
-        total = qs.filter(operateur=op).aggregate(total=Sum('commission'))['total'] or 0
-        rapport.append({"operateur": op, "total_commissions": total})
+        t = qs.filter(operateur=op).aggregate(
+            total=Sum('commission'),
+            depots=Sum('commission', filter=Q(type='Depot')),
+            retraits=Sum('commission', filter=Q(type='Retrait')),
+            credits=Sum('commission', filter=Q(type='Credit')),
+        )
+        rapport.append({
+            "operateur": op,
+            "total_commissions": t['total'] or 0,
+            "commissions_depots": t['depots'] or 0,
+            "commissions_retraits": t['retraits'] or 0,
+            "commissions_credits": t['credits'] or 0,
+        })
 
     total_global = sum(r['total_commissions'] for r in rapport)
     return Response({"commissions_par_operateur": rapport, "total_global": total_global})
+
+
+def _totaux_jour(qs):
+    """Totaux et nombres d'opérations par type sur un queryset de transactions."""
+    t = qs.aggregate(
+        total_depots=Sum('montant', filter=Q(type='Depot')),
+        total_retraits=Sum('montant', filter=Q(type='Retrait')),
+        total_credits=Sum('montant', filter=Q(type='Credit')),
+        total_depenses=Sum('montant', filter=Q(type='Depense')),
+        total_commissions=Sum('commission'),
+        nombre_depots=Count('id', filter=Q(type='Depot')),
+        nombre_retraits=Count('id', filter=Q(type='Retrait')),
+        nombre_credits=Count('id', filter=Q(type='Credit')),
+        nombre_depenses=Count('id', filter=Q(type='Depense')),
+        nombre_operations=Count('id'),
+    )
+    return {k: v or 0 for k, v in t.items()}
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, EstVerifie])
+def rapport_reseau(request):
+    """
+    GET /rapports/reseau/?date=2025-04-10
+    Vue consolidée des boutiques du propriétaire connecté (offres Pro et
+    Premium) : totaux du jour et soldes, par boutique et pour tout le réseau.
+    """
+    pack = _pack_effectif(request.user)
+    if not pack or pack.max_boutiques == 1:
+        return Response({
+            "error": "La vue réseau et les rapports consolidés sont inclus dans les offres Pro et Premium.",
+            "upgrade_required": True,
+        }, status=403)
+
+    selected_date, error_response = _date_rapport(request)
+    if error_response:
+        return error_response
+
+    boutiques = Boutique.objects.filter(
+        proprietaire=request.user, active=True,
+        id__in=boutiques_autorisees_ids(request.user),
+    ).order_by('cree_le')
+
+    lignes = []
+    for boutique in boutiques:
+        totaux = _totaux_jour(_transactions_du_jour(boutique, selected_date))
+        soldes = _soldes_par_operateur(boutique)
+        lignes.append({
+            "id": str(boutique.id),
+            "nom": boutique.nom,
+            "couleur": boutique.couleur,
+            **totaux,
+            "benefice_net": totaux['total_commissions'] - totaux['total_depenses'],
+            "soldes": soldes,
+            "solde_total": sum(x['montant'] for x in soldes),
+            "nombre_sims": Sim.objects.filter(boutique=boutique, active=True).count(),
+        })
+
+    cles = [k for k in _totaux_jour(Transaction.objects.none())]
+    totaux = {k: sum(ligne[k] for ligne in lignes) for k in cles}
+    totaux['benefice_net'] = sum(ligne['benefice_net'] for ligne in lignes)
+    totaux['solde_total'] = sum(ligne['solde_total'] for ligne in lignes)
+
+    return Response({
+        "date": selected_date.isoformat(),
+        "nombre_boutiques": len(lignes),
+        "totaux": totaux,
+        "boutiques": lignes,
+    })
 
 
 # ══════════════════════════════════════════════════════════════════════════

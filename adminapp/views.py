@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.contrib import messages
 
 from momoapi.models import *
+from momoapi.permissions import boutiques_autorisees_ids
 
 
 def _jour(d):
@@ -97,6 +98,37 @@ def logout_view(request):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  OFFRES — Basic est gratuit et permanent : tout utilisateur sans abonnement
+#  payant actif est sur Basic, même sans ligne d'abonnement.
+# ══════════════════════════════════════════════════════════════════════════
+
+def _abonnements_payants_actifs():
+    return Abonnement.objects.filter(
+        statut='actif', fin__gte=date.today(), pack__prix_mensuel__gt=0,
+    )
+
+
+def _repartition_offres():
+    """Nombre d'utilisateurs par offre effective (Basic inclus), toutes les offres affichées."""
+    par_pack = dict(
+        _abonnements_payants_actifs()
+        .values_list('pack__cle')
+        .annotate(total=Count('utilisateur', distinct=True))
+    )
+    nb_payants = _abonnements_payants_actifs().values('utilisateur').distinct().count()
+    lignes = []
+    for pack in Pack.objects.filter(actif=True).order_by('prix_mensuel'):
+        total = Utilisateur.objects.count() - nb_payants if pack.cle == 'basic' else par_pack.get(pack.cle, 0)
+        lignes.append({'pack__nom': pack.nom, 'pack__cle': pack.cle, 'total': total})
+    return lignes
+
+
+def _offre_effective(utilisateur):
+    abo = _abonnements_payants_actifs().filter(utilisateur=utilisateur).select_related('pack').first()
+    return abo.pack if abo else Pack.objects.filter(cle='basic').first()
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  ACCUEIL — VUE D'ENSEMBLE
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -116,7 +148,7 @@ def accueil(request):
         'transactions_auj':     Transaction.objects.filter(date__gte=_jour(today)[0], date__lt=_jour(today)[1]).count(),
         'total_avis':           Avis.objects.count(),
         'avis_non_lus':         Avis.objects.filter(lu=False).count(),
-        'abonnements_actifs':   Abonnement.objects.filter(statut='actif', fin__gte=today).count(),
+        'abonnements_payants':  _abonnements_payants_actifs().count(),
     }
 
     # ── Volume transactions 7 derniers jours ──
@@ -141,12 +173,8 @@ def accueil(request):
     # ── Dernières transactions ──
     dernieres_tx = Transaction.objects.select_related('boutique', 'effectuee_par', 'sim').order_by('-date')[:8]
 
-    # ── Répartition abonnements par pack ──
-    abo_par_pack = (
-        Abonnement.objects.filter(statut='actif', fin__gte=today)
-        .values('pack__nom', 'pack__cle')
-        .annotate(total=Count('id'))
-    )
+    # ── Répartition des utilisateurs par offre ──
+    abo_par_pack = _repartition_offres()
 
     # ── Nouveaux utilisateurs 30j ──
     users_30j = []
@@ -162,7 +190,7 @@ def accueil(request):
         'type_data': type_data,
         'top_boutiques': top_boutiques,
         'dernieres_tx': dernieres_tx,
-        'abo_par_pack': list(abo_par_pack),
+        'abo_par_pack': abo_par_pack,
         'users_30j': users_30j,
     }
     return render(request, 'dashboard/accueil.html', context)
@@ -204,8 +232,12 @@ def utilisateurs(request):
 @staff_required
 def utilisateur_detail(request, user_id):
     user = get_object_or_404(Utilisateur, id=user_id)
-    boutiques = MembreBoutique.objects.filter(utilisateur=user, actif=True).select_related('boutique')
+    boutiques = MembreBoutique.objects.filter(utilisateur=user, actif=True).select_related('boutique').annotate(
+        nb_sims=Count('boutique__sims', filter=Q(boutique__sims__active=True), distinct=True),
+    )
     abonnements = Abonnement.objects.filter(utilisateur=user).select_related('pack').order_by('-cree_le')
+    offre = _offre_effective(user)
+    abonnement_payant = _abonnements_payants_actifs().filter(utilisateur=user).first()
     transactions = Transaction.objects.filter(effectuee_par=user).order_by('-date')[:10]
     avis = Avis.objects.filter(utilisateur=user).order_by('-cree_le')
 
@@ -230,6 +262,8 @@ def utilisateur_detail(request, user_id):
         'u': user,
         'boutiques': boutiques,
         'abonnements': abonnements,
+        'offre': offre,
+        'abonnement_payant': abonnement_payant,
         'transactions': transactions,
         'avis': avis,
     })
@@ -245,8 +279,9 @@ def boutiques(request):
     filtre = request.GET.get('filtre', 'actives')
 
     qs = Boutique.objects.select_related('proprietaire').annotate(
-        nb_membres=Count('membres', filter=Q(membres__actif=True)),
-        nb_transactions=Count('transactions'),
+        nb_membres=Count('membres', filter=Q(membres__actif=True), distinct=True),
+        nb_sims=Count('sims', filter=Q(sims__active=True), distinct=True),
+        nb_transactions=Count('transactions', distinct=True),
     ).order_by('-cree_le')
 
     if q:
@@ -256,12 +291,22 @@ def boutiques(request):
     elif filtre == 'inactives':
         qs = qs.filter(active=False)
 
+    # Offre effective du propriétaire de chaque boutique (Basic par défaut)
+    offres = {
+        a['utilisateur_id']: a['pack__nom']
+        for a in _abonnements_payants_actifs().values('utilisateur_id', 'pack__nom')
+    }
+    basic = Pack.objects.filter(cle='basic').first()
+    qs = list(qs)
+    for b in qs:
+        b.offre = offres.get(b.proprietaire_id, basic.nom if basic else 'Basic')
+
     return render(request, 'dashboard/boutiques.html', {
         'page': 'boutiques',
         'boutiques': qs,
         'q': q,
         'filtre': filtre,
-        'total': qs.count(),
+        'total': len(qs),
     })
 
 
@@ -287,8 +332,15 @@ def boutique_detail(request, boutique_id):
         total_depots=Sum('montant', filter=Q(type='Depot')),
         total_retraits=Sum('montant', filter=Q(type='Retrait')),
         total_credits=Sum('montant', filter=Q(type='Credit')),
+        total_depenses=Sum('montant', filter=Q(type='Depense')),
         total_commissions=Sum('commission'),
+        nombre_depots=Count('id', filter=Q(type='Depot')),
+        nombre_retraits=Count('id', filter=Q(type='Retrait')),
+        nombre_credits=Count('id', filter=Q(type='Credit')),
+        nombre_depenses=Count('id', filter=Q(type='Depense')),
     )
+    stats = {k: v or 0 for k, v in stats.items()}
+    stats['benefice_net'] = stats['total_commissions'] - stats['total_depenses']
 
     if request.method == 'POST' and request.POST.get('action') == 'toggle_active':
         boutique.active = not boutique.active
@@ -305,6 +357,9 @@ def boutique_detail(request, boutique_id):
         'total_soldes': sum(g['total'] for g in soldes_par_operateur) + caisse,
         'transactions': transactions,
         'stats': stats,
+        'offre_proprietaire': _offre_effective(boutique.proprietaire),
+        # Au-delà de la limite de l'offre du propriétaire (abonnement expiré)
+        'suspendue': boutique.active and boutique.id not in boutiques_autorisees_ids(boutique.proprietaire),
     })
 
 
@@ -395,11 +450,7 @@ def abonnements_view(request):
         qs = qs.filter(utilisateur__email__icontains=q)
 
     packs = Pack.objects.all()
-    abo_par_pack = (
-        Abonnement.objects.filter(statut='actif', fin__gte=today)
-        .values('pack__nom', 'pack__cle')
-        .annotate(total=Count('id'))
-    )
+    abo_par_pack = _repartition_offres()
 
     return render(request, 'dashboard/abonnements.html', {
         'page': 'abonnements',
@@ -408,7 +459,7 @@ def abonnements_view(request):
         'filtre': filtre,
         'q': q,
         'packs': packs,
-        'abo_par_pack': list(abo_par_pack),
+        'abo_par_pack': abo_par_pack,
     })
 
 

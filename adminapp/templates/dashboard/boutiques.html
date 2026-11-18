@@ -37,7 +37,9 @@
         <tr>
           <th>Boutique</th>
           <th>Propriétaire</th>
+          <th>Offre</th>
           <th>Membres</th>
+          <th>SIM actives</th>
           <th>Transactions</th>
           <th>Statut</th>
           <th>Créée le</th>
@@ -58,7 +60,9 @@
               {{ b.proprietaire.prenom }} {{ b.proprietaire.nom }}
             </a>
           </td>
+          <td><span class="badge badge-gray">{{ b.offre }}</span></td>
           <td><span class="badge badge-blue">{{ b.nb_membres }}</span></td>
+          <td><span class="badge badge-purple">{{ b.nb_sims }}</span></td>
           <td><span class="badge badge-gray">{{ b.nb_transactions }}</span></td>
           <td>
             {% if b.active %}
@@ -71,7 +75,7 @@
           <td><a href="{% url 'dashboard:boutique_detail' b.id %}" class="btn btn-ghost btn-sm">Voir →</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="empty">Aucune boutique trouvée</td></tr>
+        <tr><td colspan="9" class="empty">Aucune boutique trouvée</td></tr>
         {% endfor %}
       </tbody>
     </table>

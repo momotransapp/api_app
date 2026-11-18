@@ -400,6 +400,130 @@ class SimsTests(TestCase):
         self.assertEqual(self.client.patch(url, {'MTN': 1}, format='json').status_code, 400)
 
 
+class SubscriptionFeatureAccessTests(TestCase):
+    """Les limitations d'offre sont imposées par l'API, jamais par le mobile seul."""
+
+    def setUp(self):
+        self.user = Utilisateur.objects.create_user(
+            'offres@example.com', 'motdepasse123', nom='Doe', prenom='Lina', is_verified=True,
+        )
+        self.basic = Pack.objects.create(
+            cle='basic', nom='Basic', max_boutiques=1, max_utilisateurs=-1, rapports_avances=False,
+        )
+        Abonnement.objects.create(
+            utilisateur=self.user, pack=self.basic, statut='actif',
+            debut=timezone.localdate(), fin=timezone.localdate() + timedelta(days=365),
+        )
+        self.boutique = Boutique.objects.create(proprietaire=self.user, nom='Cabine principale')
+        MembreBoutique.objects.create(boutique=self.boutique, utilisateur=self.user, role='proprietaire')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.base = f'/api/boutiques/{self.boutique.id}'
+
+    def test_basic_recoit_une_invitation_a_changer_offre(self):
+        nouvelle_boutique = self.client.post('/api/boutiques/', {'nom': 'Deuxième cabine'}, format='json')
+        self.assertEqual(nouvelle_boutique.status_code, 403)
+        self.assertTrue(nouvelle_boutique.data['upgrade_required'])
+
+        for route in ('rapports/operateurs/', 'rapports/commissions/'):
+            response = self.client.get(f'{self.base}/{route}')
+            self.assertEqual(response.status_code, 403)
+            self.assertTrue(response.data['upgrade_required'])
+            self.assertIn('Basic Plus', response.data['error'])
+
+        # Le rapport journalier fait partie de Basic et ne doit pas être bloqué.
+        self.assertEqual(self.client.get(f'{self.base}/rapports/journalier/').status_code, 200)
+
+    def test_basic_plus_debloque_les_analyses_avancees(self):
+        basic_plus = Pack.objects.get(cle='basic_plus')
+        basic_plus.rapports_avances = True
+        basic_plus.save(update_fields=['rapports_avances'])
+        abonnement = self.user.abonnements.get()
+        abonnement.pack = basic_plus
+        abonnement.save(update_fields=['pack'])
+
+        self.assertEqual(self.client.get(f'{self.base}/rapports/operateurs/').status_code, 200)
+        self.assertEqual(self.client.get(f'{self.base}/rapports/commissions/').status_code, 200)
+
+    def _employe(self):
+        employe = Utilisateur.objects.create_user(
+            'employe@example.com', 'motdepasse123', nom='Doe', prenom='Ali', is_verified=True,
+        )
+        MembreBoutique.objects.create(boutique=self.boutique, utilisateur=employe, role='gerant')
+        client = APIClient()
+        client.force_authenticate(employe)
+        return client
+
+    def test_rapports_avances_suivent_l_offre_du_proprietaire(self):
+        # L'employé n'a aucun abonnement : c'est l'offre du propriétaire qui compte.
+        employe = self._employe()
+        refus = employe.get(f'{self.base}/rapports/operateurs/')
+        self.assertEqual(refus.status_code, 403)
+        # Seul le propriétaire peut changer d'offre : pas de redirection pour l'employé
+        self.assertNotIn('upgrade_required', refus.data)
+        self.assertTrue(refus.data['offre_proprietaire_requise'])
+
+        abonnement = self.user.abonnements.get()
+        abonnement.pack = Pack.objects.get(cle='basic_plus')
+        abonnement.save(update_fields=['pack'])
+        Pack.objects.filter(cle='basic_plus').update(rapports_avances=True)
+        self.assertEqual(employe.get(f'{self.base}/rapports/operateurs/').status_code, 200)
+
+    def test_boutique_au_dela_de_l_offre_suspendue_sans_deconnexion(self):
+        # Ancienne offre Pro expirée : la 2e boutique dépasse la limite de Basic
+        deuxieme = Boutique.objects.create(proprietaire=self.user, nom='Cabine 2')
+        MembreBoutique.objects.create(boutique=deuxieme, utilisateur=self.user, role='proprietaire')
+        r = self.client.get(f'/api/boutiques/{deuxieme.id}/transactions/')
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(r.data['upgrade_required'])
+        # L'app déconnecte sur « accès refusé / plus accessible / retiré / membre »
+        self.assertNotRegex(r.data['error'].lower(), r'acc[eè]s refus|plus accessible|retir|membre')
+        self.assertEqual(self.client.get(f'{self.base}/transactions/').status_code, 200)
+
+    def test_benefice_net_et_nombres_du_rapport_journalier(self):
+        caisse = SoldeOperateur.objects.create(boutique=self.boutique, operateur='Caisse', montant=50000)
+        sim = Sim.objects.create(boutique=self.boutique, operateur='MTN', nom='SIM 1', numero='0197000000', solde=50000)
+        for montant, commission in ((10000, 150), (5000, 100)):
+            self.client.post(f'{self.base}/transactions/', {
+                'type': 'Depot', 'sim': str(sim.id), 'montant': montant, 'commission': commission,
+                'numero_client': '0197000001',
+            }, format='json')
+        self.client.post(f'{self.base}/transactions/', {
+            'type': 'Depense', 'operateur': 'Caisse', 'montant': 100, 'motif': 'Eau',
+        }, format='json')
+        caisse.refresh_from_db()
+
+        r = self.client.get(f'{self.base}/rapports/journalier/').data
+        self.assertEqual((r['nombre_depots'], r['nombre_depenses'], r['nombre_operations']), (2, 1, 3))
+        self.assertEqual(Decimal(str(r['total_commissions'])), Decimal('250'))
+        self.assertEqual(Decimal(str(r['benefice_net'])), Decimal('150'))
+
+    def test_vue_reseau_reservee_a_pro_et_premium(self):
+        r = self.client.get('/api/rapports/reseau/')
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(r.data['upgrade_required'])
+
+        pro = Pack.objects.create(cle='pro', nom='Pro', prix_mensuel=2000, max_boutiques=3,
+                                  max_utilisateurs=-1, rapports_avances=True)
+        abonnement = self.user.abonnements.get()
+        abonnement.pack = pro
+        abonnement.save(update_fields=['pack'])
+        deuxieme = self.client.post('/api/boutiques/', {'nom': 'Cabine 2'}, format='json')
+        self.assertEqual(deuxieme.status_code, 201, deuxieme.data)
+        sim = Sim.objects.create(boutique_id=deuxieme.data['id'], operateur='Moov', nom='SIM', numero='0196000000', solde=30000)
+        self.client.post(f"/api/boutiques/{deuxieme.data['id']}/transactions/", {
+            'type': 'Depot', 'sim': str(sim.id), 'montant': 2000, 'numero_client': '0196000001',
+        }, format='json')
+
+        r = self.client.get('/api/rapports/reseau/')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data['nombre_boutiques'], 2)
+        self.assertEqual(r.data['totaux']['nombre_depots'], 1)
+        self.assertEqual(Decimal(str(r.data['totaux']['total_depots'])), Decimal('2000'))
+        par_nom = {b['nom']: b for b in r.data['boutiques']}
+        self.assertEqual(Decimal(str(par_nom['Cabine 2']['solde_total'])), Decimal('30000'))
+
+
 class MigrationSimsTests(TransactionTestCase):
     """0012 : les anciens soldes par opérateur deviennent une SIM chacun."""
 

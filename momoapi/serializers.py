@@ -113,7 +113,7 @@ class AbonnementSerializer(serializers.ModelSerializer):
 
 
 class SouscrireAbonnementSerializer(serializers.Serializer):
-    pack_cle = serializers.ChoiceField(choices=['basic', 'pro', 'premium'])
+    pack_cle = serializers.ChoiceField(choices=['basic', 'basic_plus', 'pro', 'premium'])
 
 
 # ══════════════════════════════════════════════════════════════════════

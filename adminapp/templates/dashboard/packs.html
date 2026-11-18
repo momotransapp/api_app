@@ -15,11 +15,12 @@
 <div class="grid-3">
   {% for pack in packs %}
   <div class="panel" style="
-    {% if pack.cle == 'pro' %}border-color:rgba(67,160,71,0.3);{% endif %}
+    {% if pack.cle == 'basic_plus' %}border-color:rgba(100,116,139,0.3);{% endif %}
+    {% if pack.cle == 'pro' %}border-color:rgba(22,135,249,0.3);{% endif %}
     {% if pack.cle == 'premium' %}border-color:rgba(251,140,0,0.3);{% endif %}
   ">
     <div class="panel-header" style="
-      background:{% if pack.cle == 'basic' %}var(--bg3){% elif pack.cle == 'pro' %}rgba(67,160,71,0.06){% else %}rgba(251,140,0,0.06){% endif %};
+      background:{% if pack.cle == 'basic' %}var(--bg3){% elif pack.cle == 'basic_plus' %}rgba(100,116,139,0.06){% elif pack.cle == 'pro' %}rgba(22,135,249,0.06){% else %}rgba(251,140,0,0.06){% endif %};
     ">
       <div>
         <div style="font-size:20px;margin-bottom:6px">
@@ -57,7 +58,7 @@
           <span class="td-main">{% if pack.max_boutiques == -1 %}∞ Illimité{% else %}{{ pack.max_boutiques }}{% endif %}</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:13px;color:var(--text2)">Utilisateurs max</span>
+          <span style="font-size:13px;color:var(--text2)">Utilisateurs par boutique</span>
           <span class="td-main">{% if pack.max_utilisateurs == -1 %}∞ Illimité{% else %}{{ pack.max_utilisateurs }}{% endif %}</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -100,7 +101,7 @@
 <!-- Note -->
 <div style="background:rgba(41,121,255,0.06);border:1px solid rgba(41,121,255,0.15);border-radius:var(--radius-lg);padding:16px 20px;font-size:13px;color:var(--text2);margin-top:4px">
   <span style="color:var(--accent)">ℹ</span> &nbsp;
-  Pour modifier les packs (prix, limites, features), utilisez le panneau d'administration Django standard ou l'interface base de données.
+  Les SIM ne sont pas limitées par une offre : chaque cabine peut gérer autant de SIM MTN, Moov ou Celtiis que nécessaire.
 </div>
 
 {% endblock %}

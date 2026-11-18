@@ -64,6 +64,8 @@ urlpatterns = [
          views.rapport_commissions,                                                  name='rapport_commissions'),
     path('boutiques/<uuid:boutique_id>/rapports/solde-global/',
          views.solde_global,                                                         name='solde_global'),
+    path('rapports/reseau/',
+         views.rapport_reseau,                                                       name='rapport_reseau'),
     
     path('avis/',                    views.soumettre_avis,   name='soumettre_avis'),
     path('avis/admin/',              views.liste_avis,        name='liste_avis'),

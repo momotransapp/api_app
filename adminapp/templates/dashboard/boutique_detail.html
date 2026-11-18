@@ -11,7 +11,11 @@
     <a href="{% url 'dashboard:boutiques' %}" class="btn btn-ghost btn-sm">← Retour</a>
     <div style="flex:1;min-width:0">
       <div class="page-heading">{{ boutique.nom }}</div>
-      <div class="page-sub">Propriétaire : {{ boutique.proprietaire.prenom }} {{ boutique.proprietaire.nom }}</div>
+      <div class="page-sub">
+        Propriétaire : {{ boutique.proprietaire.prenom }} {{ boutique.proprietaire.nom }}
+        · Offre <strong>{{ offre_proprietaire.nom|default:"Basic" }}</strong>
+        {% if suspendue %}<span class="badge badge-red" style="margin-left:6px">Suspendue</span>{% endif %}
+      </div>
     </div>
   </div>
   <form method="post" style="width:100%">
@@ -23,7 +27,14 @@
   </form>
 </div>
 
-<!-- KPIs boutique -->
+{% if suspendue %}
+<div style="background:rgba(229,57,53,0.06);border:1px solid rgba(229,57,53,0.25);border-radius:var(--radius-lg);padding:14px 18px;font-size:13px;color:var(--text2);margin-bottom:20px">
+  Cette boutique dépasse la limite de l'offre <strong>{{ offre_proprietaire.nom|default:"Basic" }}</strong> du propriétaire
+  (abonnement expiré). Elle est suspendue jusqu'à ce qu'il passe à une offre supérieure ; ses données sont conservées.
+</div>
+{% endif %}
+
+<!-- KPIs boutique (depuis la création, nombre d'opérations entre parenthèses) -->
 <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:24px">
   <!-- Section Opérateur -->
   <div>
@@ -31,13 +42,18 @@
     <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">
       <div class="kpi-card" style="--accent-color:#43A047">
         <span class="kpi-icon">📥</span>
-        <div class="kpi-value" style="font-size:16px">{{ stats.total_depots|default:0|floatformat:0 }}</div>
-        <div class="kpi-label">Dépôts reçus (XOF)</div>
+        <div class="kpi-value" style="font-size:16px">{{ stats.total_depots|floatformat:0 }}</div>
+        <div class="kpi-label">Dépôts ({{ stats.nombre_depots }}) · XOF</div>
       </div>
       <div class="kpi-card" style="--accent-color:#E53935">
         <span class="kpi-icon">📤</span>
-        <div class="kpi-value" style="font-size:16px">{{ stats.total_retraits|default:0|floatformat:0 }}</div>
-        <div class="kpi-label">Retraits versés (XOF)</div>
+        <div class="kpi-value" style="font-size:16px">{{ stats.total_retraits|floatformat:0 }}</div>
+        <div class="kpi-label">Retraits ({{ stats.nombre_retraits }}) · XOF</div>
+      </div>
+      <div class="kpi-card" style="--accent-color:#1E88E5">
+        <span class="kpi-icon">📱</span>
+        <div class="kpi-value" style="font-size:16px">{{ stats.total_credits|floatformat:0 }}</div>
+        <div class="kpi-label">Crédits / forfaits ({{ stats.nombre_credits }}) · XOF</div>
       </div>
     </div>
   </div>
@@ -46,15 +62,20 @@
   <div>
     <div class="kpi-label" style="color:var(--text3);font-size:12px;font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Compte Caisse</div>
     <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">
-      <div class="kpi-card" style="--accent-color:#1E88E5">
-        <span class="kpi-icon">💳</span>
-        <div class="kpi-value" style="font-size:16px">{{ stats.total_depots|add:stats.total_credits|default:0|floatformat:0 }}</div>
-        <div class="kpi-label">Reçu en caisse (XOF)</div>
+      <div class="kpi-card" style="--accent-color:#E53935">
+        <span class="kpi-icon">🧾</span>
+        <div class="kpi-value" style="font-size:16px">{{ stats.total_depenses|floatformat:0 }}</div>
+        <div class="kpi-label">Dépenses ({{ stats.nombre_depenses }}) · XOF</div>
       </div>
       <div class="kpi-card" style="--accent-color:#FB8C00">
         <span class="kpi-icon">⭐</span>
-        <div class="kpi-value" style="font-size:16px">{{ stats.total_commissions|default:0|floatformat:0 }}</div>
+        <div class="kpi-value" style="font-size:16px">{{ stats.total_commissions|floatformat:0 }}</div>
         <div class="kpi-label">Commissions (XOF)</div>
+      </div>
+      <div class="kpi-card" style="--accent-color:#43A047">
+        <span class="kpi-icon">💰</span>
+        <div class="kpi-value" style="font-size:16px">{{ stats.benefice_net|floatformat:0 }}</div>
+        <div class="kpi-label">Bénéfice net (XOF)</div>
       </div>
     </div>
   </div>

@@ -85,9 +85,10 @@ class CodeVerification(models.Model):
 
 class Pack(models.Model):
     CLE_CHOICES = [
-        ('basic',   'Basic'),
-        ('pro',     'Pro'),
-        ('premium', 'Premium'),
+        ('basic',      'Basic'),
+        ('basic_plus', 'Basic Plus'),
+        ('pro',        'Pro'),
+        ('premium',    'Premium'),
     ]
     cle              = models.CharField(max_length=20, choices=CLE_CHOICES, unique=True)
     nom              = models.CharField(max_length=100)

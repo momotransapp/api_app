@@ -34,8 +34,9 @@
   </div>
   <div class="kpi-card" style="--accent-color: #FDD835">
     <span class="kpi-icon">📦</span>
-    <div class="kpi-value">{{ kpis.abonnements_actifs }}</div>
-    <div class="kpi-label">Abonnements actifs</div>
+    <div class="kpi-value">{{ kpis.abonnements_payants }}</div>
+    <div class="kpi-label">Abonnements payants</div>
+    <div class="kpi-sub">Les autres utilisateurs sont sur Basic (gratuit)</div>
   </div>
   <div class="kpi-card" style="--accent-color: #E53935">
     <span class="kpi-icon">💬</span>
@@ -61,17 +62,14 @@
   <!-- Abonnements par pack -->
   <div class="panel">
     <div class="panel-header">
-      <div class="panel-title">Abonnements actifs par pack</div>
+      <div class="panel-title">Utilisateurs par offre</div>
     </div>
     <div class="panel-body" style="display:flex;align-items:center;gap:24px;">
       <canvas id="chartPacks" width="160" height="160" style="flex-shrink:0"></canvas>
       <div style="flex:1">
         {% for abo in abo_par_pack %}
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-          <span class="dot
-            {% if abo.pack__cle == 'basic' %}dot-gray
-            {% elif abo.pack__cle == 'pro' %}dot-green
-            {% else %}dot-amber{% endif %}"></span>
+          <span class="dot" style="background:{% if abo.pack__cle == 'basic' %}#95a5a6{% elif abo.pack__cle == 'basic_plus' %}#64748B{% elif abo.pack__cle == 'pro' %}#1687F9{% else %}#B87828{% endif %}"></span>
           <span style="font-size:13px;color:var(--text)">{{ abo.pack__nom }}</span>
           <span style="margin-left:auto;font-size:13px;font-weight:600;color:var(--text)">{{ abo.total }}</span>
         </div>
@@ -207,6 +205,7 @@
 
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{{ abo_par_pack|json_script:"packs-data" }}
 <script>
 Chart.defaults.color = '#7f8c8d';
 Chart.defaults.borderColor = 'rgba(0,0,0,0.08)';
@@ -237,7 +236,7 @@ new Chart(document.getElementById('chartTx'), {
 });
 
 // ── Packs donut ──
-const packsData = {{ abo_par_pack|safe }};
+const packsData = JSON.parse(document.getElementById('packs-data').textContent);
 if (packsData.length) {
   new Chart(document.getElementById('chartPacks'), {
     type: 'doughnut',
@@ -245,7 +244,7 @@ if (packsData.length) {
       labels: packsData.map(d => d.pack__nom),
       datasets: [{
         data: packsData.map(d => d.total),
-        backgroundColor: ['#95a5a6', '#43A047', '#FB8C00'],
+        backgroundColor: packsData.map(d => ({ basic: '#95a5a6', basic_plus: '#64748B', pro: '#1687F9' })[d.pack__cle] || '#B87828'),
         borderWidth: 0,
         hoverOffset: 4,
       }]
